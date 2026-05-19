@@ -1,0 +1,101 @@
+{
+  "project": "SweetControl",
+  "theme": "light_and_dark",
+  "archetype": "Archetype 3 (Pastel & Soft) & Archetype 5 (Jewel & Luxury)",
+  "global_styles": {
+    "border_radius": "rounded-2xl",
+    "shadows": "shadow-[0_8px_30px_rgb(0,0,0,0.04)]",
+    "glassmorphism": {
+      "light": "backdrop-blur-xl bg-white/70 border border-white/40",
+      "dark": "backdrop-blur-xl bg-[#251E27]/70 border border-white/10"
+    }
+  },
+  "colors": {
+    "light": {
+      "background": "#FDFBF7",
+      "surface": "#FFFFFF",
+      "primary": "#E4B5C6",
+      "primary_foreground": "#4A2D35",
+      "secondary": "#E6D7FF",
+      "secondary_foreground": "#3A2B55",
+      "accent": "#F5E6BA",
+      "accent_foreground": "#50411F",
+      "muted": "#F3F0EC",
+      "text_primary": "#2D2A26",
+      "text_muted": "#8A8581",
+      "border": "#F0EAE1",
+      "destructive": "#FFCDD2"
+    },
+    "dark": {
+      "background": "#1A161C",
+      "surface": "#251E27",
+      "primary": "#F48FB1",
+      "primary_foreground": "#2D1621",
+      "secondary": "#B39DDB",
+      "secondary_foreground": "#F9F6F7",
+      "accent": "#F3E5AB",
+      "accent_foreground": "#2D2A1F",
+      "muted": "#352B38",
+      "text_primary": "#F9F6F7",
+      "text_muted": "#AFA9AD",
+      "border": "#3D3240",
+      "destructive": "#E57373"
+    },
+    "chart_palette": [
+      "#E4B5C6",
+      "#D1C4E9",
+      "#F5E6BA",
+      "#B2EBF2",
+      "#FFCDD2"
+    ]
+  },
+  "typography": {
+    "headings": "Cormorant Garamond",
+    "body": "Outfit",
+    "scales": {
+      "h1": "text-4xl sm:text-5xl tracking-tight leading-none",
+      "h2": "text-2xl sm:text-3xl tracking-tight",
+      "h3": "text-xl sm:text-2xl",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm text-muted"
+    }
+  },
+  "layout": {
+    "sidebar": "Fixed left, glassmorphic or soft solid background, pill-shaped active states.",
+    "dashboard_grid": "Grid cols-1 md:cols-3 lg:cols-4 gap-6. Follow Control Room bento grid setup.",
+    "spacing": "Generous padding (p-6, p-8) inside cards to prevent text collision."
+  },
+  "components": {
+    "cards": "Flat background or glassmorphic, rounded-2xl, subtle border, hover:-translate-y-1 hover:shadow-lg transition-all duration-300.",
+    "buttons": "Primary buttons use primary color. rounded-xl. Hover: brightness-95.",
+    "tables": "Shadcn Table, clean lines, no vertical borders, soft pastel hover states for rows.",
+    "inputs": "Shadcn Input, rounded-xl, soft focus ring (focus:ring-2 focus:ring-primary/50)."
+  },
+  "animations": {
+    "page_transitions": "Framer motion fade in and slide up (y: 20 -> 0, opacity: 0 -> 1)",
+    "micro_interactions": "Scale button 0.98 on tap, smooth hover on dashboard cards"
+  },
+  "media": {
+    "login_background": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/ef1d36d7-07ea-44cf-bbdb-9b4af61ab6c4/images/1864fdc948336852eeb587e7a469e41a1c41e6bdd273abd10b1bd5c21496089b.png",
+      "description": "Abstract elegant feminine background with soft pastel pink, nude, and gentle gold waves."
+    },
+    "hero_cake": {
+      "url": "https://images.pexels.com/photos/10949480/pexels-photo-10949480.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Beautifully decorated cake featuring pastel floral designs for empty states or welcome banners."
+    },
+    "bakery_interior": {
+      "url": "https://images.pexels.com/photos/15835094/pexels-photo-15835094.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Inviting bakery interior with pastel doors for settings or profile background context."
+    }
+  },
+  "instructions_to_main_agent": [
+    "Ensure all interactive elements and key text have a data-testid attribute.",
+    "Implement a feminine dark mode using deep aubergine (#1A161C) rather than pure black.",
+    "Use Shadcn UI extensively but customize border radius to rounded-2xl or higher, and inject the pastel color palette.",
+    "Use Recharts for the Dashboard charts with the provided chart_palette.",
+    "Install Framer Motion for soft layout transitions.",
+    "Fonts: Import Cormorant Garamond (headings) and Outfit (body). Apply globally in Tailwind.",
+    "Avoid pure black/grey text; use the warm text colors defined."
+  ]
+}
