@@ -1,34 +1,29 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* SweetControl app-level overrides */
+.App { min-height: 100vh; }
+
+/* Recharts custom feminine palette */
+.recharts-default-tooltip {
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 12px 40px hsl(var(--primary) / 0.18) !important;
+  padding: 10px 14px !important;
+  font-family: 'Outfit', sans-serif !important;
+}
+.recharts-tooltip-label {
+  font-family: 'Cormorant Garamond', serif !important;
+  font-size: 16px !important;
+  color: hsl(var(--primary-foreground)) !important;
+  margin-bottom: 4px !important;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+.dark .recharts-default-tooltip {
+  background: hsl(var(--card)) !important;
 }
-
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+.recharts-cartesian-axis-tick text {
+  fill: hsl(var(--muted-foreground)) !important;
+  font-size: 11px !important;
 }
-
-.App-link {
-    color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+.recharts-cartesian-grid line {
+  stroke: hsl(var(--border) / 0.7) !important;
 }

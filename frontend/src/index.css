@@ -2,114 +2,151 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-    margin: 0;
-    font-family:
-        -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
-        "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-        sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-}
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
 
-code {
-    font-family:
-        source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+@layer base {
+  :root {
+    --background: 36 50% 98%;          /* #FDFBF7 */
+    --foreground: 24 8% 16%;           /* #2D2A26 */
+    --card: 0 0% 100%;
+    --card-foreground: 24 8% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 24 8% 16%;
+    --primary: 340 50% 80%;            /* #E4B5C6 */
+    --primary-foreground: 340 25% 23%; /* #4A2D35 */
+    --secondary: 260 100% 92%;         /* #E6D7FF */
+    --secondary-foreground: 256 33% 25%;
+    --muted: 36 22% 93%;               /* #F3F0EC */
+    --muted-foreground: 24 4% 52%;     /* #8A8581 */
+    --accent: 45 70% 84%;              /* #F5E6BA */
+    --accent-foreground: 42 47% 22%;   /* #50411F */
+    --destructive: 0 70% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 33 35% 91%;              /* #F0EAE1 */
+    --input: 33 35% 91%;
+    --ring: 340 50% 75%;
+    --chart-1: 340 50% 80%;            /* rosa */
+    --chart-2: 260 38% 78%;            /* lilás */
+    --chart-3: 45 70% 84%;             /* dourado claro */
+    --chart-4: 187 65% 82%;            /* azul pastel */
+    --chart-5: 0 100% 90%;
+    --radius: 1rem;
+
+    --gold: 36 47% 60%;
+    --rose-deep: 340 35% 55%;
+  }
+
+  .dark {
+    --background: 290 11% 10%;         /* #1A161C */
+    --foreground: 320 18% 97%;         /* #F9F6F7 */
+    --card: 295 14% 14%;               /* #251E27 */
+    --card-foreground: 320 18% 97%;
+    --popover: 295 14% 14%;
+    --popover-foreground: 320 18% 97%;
+    --primary: 340 78% 76%;            /* #F48FB1 */
+    --primary-foreground: 330 35% 13%; /* #2D1621 */
+    --secondary: 262 35% 73%;          /* #B39DDB */
+    --secondary-foreground: 320 18% 97%;
+    --muted: 290 12% 20%;              /* #352B38 */
+    --muted-foreground: 290 4% 67%;    /* #AFA9AD */
+    --accent: 49 73% 81%;              /* #F3E5AB */
+    --accent-foreground: 50 18% 15%;
+    --destructive: 0 65% 67%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 290 10% 22%;             /* #3D3240 */
+    --input: 290 10% 22%;
+    --ring: 340 78% 70%;
+    --chart-1: 340 78% 76%;
+    --chart-2: 262 35% 73%;
+    --chart-3: 49 73% 81%;
+    --chart-4: 186 53% 80%;
+    --chart-5: 0 60% 75%;
+
+    --gold: 42 60% 70%;
+    --rose-deep: 340 60% 70%;
+  }
 }
 
 @layer base {
-    :root {
-        --background: 0 0% 100%;
-        --foreground: 0 0% 3.9%;
-        --card: 0 0% 100%;
-        --card-foreground: 0 0% 3.9%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 0 0% 3.9%;
-        --primary: 0 0% 9%;
-        --primary-foreground: 0 0% 98%;
-        --secondary: 0 0% 96.1%;
-        --secondary-foreground: 0 0% 9%;
-        --muted: 0 0% 96.1%;
-        --muted-foreground: 0 0% 45.1%;
-        --accent: 0 0% 96.1%;
-        --accent-foreground: 0 0% 9%;
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 89.8%;
-        --input: 0 0% 89.8%;
-        --ring: 0 0% 3.9%;
-        --chart-1: 12 76% 61%;
-        --chart-2: 173 58% 39%;
-        --chart-3: 197 37% 24%;
-        --chart-4: 43 74% 66%;
-        --chart-5: 27 87% 67%;
-        --radius: 0.5rem;
-    }
-    .dark {
-        --background: 0 0% 3.9%;
-        --foreground: 0 0% 98%;
-        --card: 0 0% 3.9%;
-        --card-foreground: 0 0% 98%;
-        --popover: 0 0% 3.9%;
-        --popover-foreground: 0 0% 98%;
-        --primary: 0 0% 98%;
-        --primary-foreground: 0 0% 9%;
-        --secondary: 0 0% 14.9%;
-        --secondary-foreground: 0 0% 98%;
-        --muted: 0 0% 14.9%;
-        --muted-foreground: 0 0% 63.9%;
-        --accent: 0 0% 14.9%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 14.9%;
-        --input: 0 0% 14.9%;
-        --ring: 0 0% 83.1%;
-        --chart-1: 220 70% 50%;
-        --chart-2: 160 60% 45%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
-    }
+  * { @apply border-border; }
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* Soft scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.4);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary) / 0.65); }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.4);
+    color: hsl(var(--primary-foreground));
+  }
 }
 
-@layer base {
-    * {
-        @apply border-border;
-    }
-    body {
-        @apply bg-background text-foreground;
-    }
+/* Decorative aurora background */
+.aurora-bg {
+  background:
+    radial-gradient(ellipse 80% 50% at 10% 0%,  hsl(var(--primary) / 0.25), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 90% 10%, hsl(var(--secondary) / 0.30), transparent 60%),
+    radial-gradient(ellipse 70% 60% at 50% 100%, hsl(var(--accent) / 0.25), transparent 60%),
+    hsl(var(--background));
+}
+.dark .aurora-bg {
+  background:
+    radial-gradient(ellipse 80% 50% at 10% 0%,  hsl(var(--primary) / 0.18), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 90% 10%, hsl(var(--secondary) / 0.18), transparent 60%),
+    radial-gradient(ellipse 70% 60% at 50% 100%, hsl(var(--accent) / 0.10), transparent 60%),
+    hsl(var(--background));
 }
 
-@layer base {
-    [data-debug-wrapper="true"] {
-        display: contents !important;
-    }
+.glass {
+  @apply backdrop-blur-xl border;
+  background: hsl(var(--card) / 0.7);
+  border-color: hsl(var(--border) / 0.6);
+}
+.dark .glass {
+  background: hsl(var(--card) / 0.6);
+  border-color: hsl(var(--border) / 0.5);
+}
 
-    [data-debug-wrapper="true"] > * {
-        margin-left: inherit;
-        margin-right: inherit;
-        margin-top: inherit;
-        margin-bottom: inherit;
-        padding-left: inherit;
-        padding-right: inherit;
-        padding-top: inherit;
-        padding-bottom: inherit;
-        column-gap: inherit;
-        row-gap: inherit;
-        gap: inherit;
-        border-left-width: inherit;
-        border-right-width: inherit;
-        border-top-width: inherit;
-        border-bottom-width: inherit;
-        border-left-style: inherit;
-        border-right-style: inherit;
-        border-top-style: inherit;
-        border-bottom-style: inherit;
-        border-left-color: inherit;
-        border-right-color: inherit;
-        border-top-color: inherit;
-        border-bottom-color: inherit;
-    }
+.heading-serif { font-family: 'Cormorant Garamond', Georgia, serif; }
+.font-body { font-family: 'Outfit', system-ui, sans-serif; }
+
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+}
+.btn-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 30%, hsl(var(--accent) / 0.5) 50%, transparent 70%);
+  transform: translateX(-100%);
+  transition: transform 0.7s;
+}
+.btn-shine:hover::after { transform: translateX(100%); }
+
+.grain {
+  position: relative;
+}
+.grain::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
