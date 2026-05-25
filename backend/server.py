@@ -35,6 +35,11 @@ from openpyxl.styles import Font, Alignment, PatternFill
 JWT_ALGORITHM = "HS256"
 JWT_SECRET = os.environ["JWT_SECRET"]
 
+# Cookie config: in production with cross-origin (Render frontend + Koyeb backend),
+# browsers require SameSite=None + Secure=True to send cookies in cross-site XHRs.
+COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "lax").lower()  # "lax" | "none" | "strict"
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
@@ -77,10 +82,10 @@ def create_refresh_token(user_id: str) -> str:
 def set_auth_cookies(response: Response, user_id: str, email: str):
     access = create_access_token(user_id, email)
     refresh = create_refresh_token(user_id)
-    response.set_cookie("access_token", access, httponly=True, secure=False,
-                        samesite="lax", max_age=43200, path="/")
-    response.set_cookie("refresh_token", refresh, httponly=True, secure=False,
-                        samesite="lax", max_age=604800, path="/")
+    response.set_cookie("access_token", access, httponly=True, secure=COOKIE_SECURE,
+                        samesite=COOKIE_SAMESITE, max_age=43200, path="/")
+    response.set_cookie("refresh_token", refresh, httponly=True, secure=COOKIE_SECURE,
+                        samesite=COOKIE_SAMESITE, max_age=604800, path="/")
 
 
 async def get_current_user(request: Request) -> dict:
