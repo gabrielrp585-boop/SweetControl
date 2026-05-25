@@ -266,6 +266,11 @@ class Settings(BaseModel):
     logo_url: str = ""
     default_margin: float = 100.0
     instagram: str = ""
+    # Hosting billing
+    hosting_fee: float = 20.0
+    hosting_pix_key: str = "14725941697"
+    hosting_pix_name: str = ""
+    hosting_due_day: int = 5
 
 
 # ---- Support Tickets ----
@@ -292,6 +297,21 @@ class SupportTicket(BaseModel):
     replies: List[dict] = []
     created_at: str
     updated_at: str
+
+
+# ---- Hosting Payments ----
+class HostingPaymentIn(BaseModel):
+    month: str  # "2026-05" format
+    amount: float = 20.0
+    status: Literal["pago", "pendente", "confirmado_cliente"] = "pendente"
+    notes: str = ""
+
+
+class HostingPayment(HostingPaymentIn):
+    id: str
+    paid_at: Optional[str] = None
+    confirmed_by_client_at: Optional[str] = None
+    created_at: str
 
 
 # ============================================================================
@@ -765,6 +785,87 @@ async def update_ticket_status(tid: str, payload: SupportStatusIn, user=Depends(
 async def delete_ticket(tid: str, user=Depends(get_current_user)):
     await db.support_tickets.delete_one({"id": tid})
     return {"ok": True}
+
+
+# ============================================================================
+# HOSTING PAYMENTS (cobrança mensal da hospedagem)
+# ============================================================================
+def _current_month() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m")
+
+
+async def _ensure_current_month_entry():
+    """Garante que existe um registro para o mês atual."""
+    month = _current_month()
+    existing = await db.hosting_payments.find_one({"month": month})
+    if not existing:
+        settings = await db.settings.find_one({"id": "main"}, {"_id": 0}) or {}
+        await db.hosting_payments.insert_one({
+            "id": new_id(),
+            "month": month,
+            "amount": float(settings.get("hosting_fee", 20.0)),
+            "status": "pendente",
+            "notes": "",
+            "paid_at": None,
+            "confirmed_by_client_at": None,
+            "created_at": now_iso(),
+        })
+
+
+@api.get("/hosting/info")
+async def hosting_info(user=Depends(get_current_user)):
+    """Retorna info para a aba de cobrança: config + mês atual + histórico."""
+    await _ensure_current_month_entry()
+    settings = await db.settings.find_one({"id": "main"}, {"_id": 0}) or {}
+    payments = await db.hosting_payments.find({}, {"_id": 0}).sort("month", -1).to_list(60)
+    current = next((p for p in payments if p["month"] == _current_month()), None)
+    return {
+        "pix_key": settings.get("hosting_pix_key", "14725941697"),
+        "pix_name": settings.get("hosting_pix_name", ""),
+        "amount": float(settings.get("hosting_fee", 20.0)),
+        "due_day": int(settings.get("hosting_due_day", 5)),
+        "current_month": current,
+        "history": payments,
+    }
+
+
+@api.post("/hosting/payments/{pid}/mark-paid")
+async def mark_paid(pid: str, user=Depends(get_current_user)):
+    """Desenvolvedor marca como recebido."""
+    await db.hosting_payments.update_one(
+        {"id": pid},
+        {"$set": {"status": "pago", "paid_at": now_iso()}},
+    )
+    p = await db.hosting_payments.find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Registro não encontrado")
+    return p
+
+
+@api.post("/hosting/payments/{pid}/confirm")
+async def confirm_payment(pid: str, user=Depends(get_current_user)):
+    """Cliente confirma que enviou o PIX."""
+    await db.hosting_payments.update_one(
+        {"id": pid},
+        {"$set": {"status": "confirmado_cliente", "confirmed_by_client_at": now_iso()}},
+    )
+    p = await db.hosting_payments.find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Registro não encontrado")
+    return p
+
+
+@api.post("/hosting/payments/{pid}/reopen")
+async def reopen_payment(pid: str, user=Depends(get_current_user)):
+    """Volta para pendente."""
+    await db.hosting_payments.update_one(
+        {"id": pid},
+        {"$set": {"status": "pendente", "paid_at": None, "confirmed_by_client_at": None}},
+    )
+    p = await db.hosting_payments.find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Registro não encontrado")
+    return p
 
 
 # ============================================================================

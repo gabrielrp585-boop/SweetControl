@@ -10,6 +10,8 @@ export default function Settings() {
   const [form, setForm] = useState({
     business_name: "", owner_name: "", address: "", phone: "",
     logo_url: "", default_margin: 100, instagram: "",
+    hosting_fee: 20, hosting_pix_key: "14725941697",
+    hosting_pix_name: "", hosting_due_day: 5,
   });
   const [loading, setLoading] = useState(true);
   const { theme, setTheme } = useTheme();
@@ -24,7 +26,12 @@ export default function Settings() {
   const save = async (e) => {
     e.preventDefault();
     try {
-      await api.put("/settings", { ...form, default_margin: Number(form.default_margin) });
+      await api.put("/settings", {
+        ...form,
+        default_margin: Number(form.default_margin),
+        hosting_fee: Number(form.hosting_fee),
+        hosting_due_day: Number(form.hosting_due_day),
+      });
       toast.success("Configurações salvas");
     } catch {
       toast.error("Erro ao salvar");
@@ -89,6 +96,45 @@ export default function Settings() {
               <div className="sm:col-span-2 flex justify-end">
                 <Button type="submit" data-testid="save-settings">
                   <Save className="h-4 w-4" /> Salvar alterações
+                </Button>
+              </div>
+            </form>
+          </Card>
+
+          {/* Hosting billing config */}
+          <Card className="p-6 mt-6">
+            <h2 className="heading-serif text-2xl mb-1">Cobrança da Hospedagem</h2>
+            <p className="text-sm text-muted-foreground mb-5">
+              Configure os dados que aparecem na aba Suporte para a cliente realizar o pagamento mensal.
+            </p>
+            <form onSubmit={save} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label>Valor mensal (R$)</Label>
+                <Input type="number" step="0.01" value={form.hosting_fee}
+                  onChange={(e) => setForm({ ...form, hosting_fee: e.target.value })}
+                  data-testid="hosting-fee" />
+              </div>
+              <div>
+                <Label>Dia de vencimento</Label>
+                <Input type="number" min="1" max="28" value={form.hosting_due_day}
+                  onChange={(e) => setForm({ ...form, hosting_due_day: e.target.value })} />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Chave PIX</Label>
+                <Input value={form.hosting_pix_key}
+                  onChange={(e) => setForm({ ...form, hosting_pix_key: e.target.value })}
+                  placeholder="CPF, email, telefone ou chave aleatória"
+                  data-testid="hosting-pix-key" />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Nome no PIX</Label>
+                <Input value={form.hosting_pix_name}
+                  onChange={(e) => setForm({ ...form, hosting_pix_name: e.target.value })}
+                  placeholder="Seu nome completo" />
+              </div>
+              <div className="sm:col-span-2 flex justify-end">
+                <Button type="submit">
+                  <Save className="h-4 w-4" /> Salvar cobrança
                 </Button>
               </div>
             </form>

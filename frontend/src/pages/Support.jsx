@@ -10,6 +10,7 @@ import {
   PageHeader, Card, Button, Input, Label, Select, Textarea, EmptyState, Modal, Badge,
 } from "@/components/ui-kit";
 import { useAuth } from "@/context/AuthContext";
+import HostingBilling from "@/components/HostingBilling";
 
 const CATEGORIES = [
   { value: "bug", label: "Bug / Erro", icon: Bug, variant: "danger" },
@@ -106,6 +107,9 @@ export default function Support() {
           </Button>
         }
       />
+
+      {/* Hosting billing card */}
+      <HostingBilling />
 
       {/* Hero info */}
       <motion.div
