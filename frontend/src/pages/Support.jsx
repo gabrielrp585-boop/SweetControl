@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, LifeBuoy, Send, MessageCircle, Bug, Lightbulb, HelpCircle, Trash2,
-  Clock, CheckCircle2, AlertCircle,
+  Clock, CheckCircle2, AlertCircle, ImagePlus, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, fmtDate } from "@/services/api";
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui-kit";
 import { useAuth } from "@/context/AuthContext";
 import HostingBilling from "@/components/HostingBilling";
+import { compressMany } from "@/lib/imageUtils";
 
 const CATEGORIES = [
   { value: "bug", label: "Bug / Erro", icon: Bug, variant: "danger" },
@@ -39,8 +40,10 @@ export default function Support() {
   const [detail, setDetail] = useState(null);
   const [replyMsg, setReplyMsg] = useState("");
   const [form, setForm] = useState({
-    subject: "", message: "", category: "bug", priority: "media",
+    subject: "", message: "", category: "bug", priority: "media", images: [],
   });
+  const [replyImages, setReplyImages] = useState([]);
+  const [uploading, setUploading] = useState(false);
 
   const load = async () => {
     const { data } = await api.get("/support");
@@ -58,19 +61,49 @@ export default function Support() {
       await api.post("/support", form);
       toast.success("Mensagem enviada! Em breve teremos retorno.");
       setOpen(false);
-      setForm({ subject: "", message: "", category: "bug", priority: "media" });
+      setForm({ subject: "", message: "", category: "bug", priority: "media", images: [] });
       load();
     } catch {
       toast.error("Erro ao enviar");
     }
   };
 
+  const handleFiles = async (files, target) => {
+    if (!files || !files.length) return;
+    setUploading(true);
+    try {
+      const imgs = await compressMany(files, 5);
+      if (target === "new") {
+        setForm((f) => ({ ...f, images: [...(f.images || []), ...imgs].slice(0, 5) }));
+      } else {
+        setReplyImages((arr) => [...arr, ...imgs].slice(0, 5));
+      }
+      toast.success(`${imgs.length} imagem(ns) anexada(s)`);
+    } catch {
+      toast.error("Erro ao processar imagem");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeImage = (idx, target) => {
+    if (target === "new") {
+      setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
+    } else {
+      setReplyImages((arr) => arr.filter((_, i) => i !== idx));
+    }
+  };
+
   const sendReply = async (e) => {
     e.preventDefault();
-    if (!replyMsg.trim()) return;
+    if (!replyMsg.trim() && replyImages.length === 0) return;
     try {
-      await api.post(`/support/${detail.id}/reply`, { message: replyMsg });
+      await api.post(`/support/${detail.id}/reply`, {
+        message: replyMsg,
+        images: replyImages,
+      });
       setReplyMsg("");
+      setReplyImages([]);
       toast.success("Resposta enviada");
       load();
     } catch {
@@ -263,6 +296,9 @@ export default function Support() {
                       <span className="text-sm font-medium">{detail.author_name}</span>
                     </div>
                     <p className="text-sm whitespace-pre-wrap">{detail.message}</p>
+                    {detail.images && detail.images.length > 0 && (
+                      <ImageGrid images={detail.images} />
+                    )}
                   </div>
 
                   {detail.replies.map((r) => {
@@ -286,6 +322,9 @@ export default function Support() {
                           </span>
                         </div>
                         <p className="text-sm whitespace-pre-wrap">{r.message}</p>
+                        {r.images && r.images.length > 0 && (
+                          <ImageGrid images={r.images} />
+                        )}
                       </div>
                     );
                   })}
@@ -297,7 +336,13 @@ export default function Support() {
                     value={replyMsg}
                     onChange={(e) => setReplyMsg(e.target.value)}
                     placeholder="Escreva sua resposta..."
-                    required
+                  />
+                  <ImageUploader
+                    images={replyImages}
+                    onAdd={(files) => handleFiles(files, "reply")}
+                    onRemove={(i) => removeImage(i, "reply")}
+                    uploading={uploading}
+                    testIdPrefix="reply"
                   />
                   <div className="flex justify-end mt-3">
                     <Button type="submit" data-testid="send-reply">
@@ -342,6 +387,13 @@ export default function Support() {
               placeholder="Descreva detalhadamente o problema ou sua dúvida..."
               className="min-h-[140px]" />
           </div>
+          <ImageUploader
+            images={form.images}
+            onAdd={(files) => handleFiles(files, "new")}
+            onRemove={(i) => removeImage(i, "new")}
+            uploading={uploading}
+            testIdPrefix="new"
+          />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
             <Button type="submit"><Send className="h-4 w-4" /> Enviar ticket</Button>
@@ -349,5 +401,93 @@ export default function Support() {
         </form>
       </Modal>
     </div>
+  );
+}
+
+// ============================================================================
+// IMAGE COMPONENTS
+// ============================================================================
+function ImageUploader({ images, onAdd, onRemove, uploading, testIdPrefix }) {
+  const id = `${testIdPrefix}-img-input`;
+  return (
+    <div className="mt-3">
+      <div className="flex items-center justify-between mb-2">
+        <Label className="mb-0">
+          Imagens {images.length > 0 && <span className="text-muted-foreground">({images.length}/5)</span>}
+        </Label>
+        <label
+          htmlFor={id}
+          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border border-border cursor-pointer transition ${
+            uploading ? "opacity-50 cursor-wait" : "hover:bg-muted"
+          }`}
+          data-testid={`${testIdPrefix}-add-image`}
+        >
+          <ImagePlus className="h-3.5 w-3.5" />
+          {uploading ? "Processando..." : "Anexar imagem"}
+        </label>
+        <input
+          id={id}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          disabled={uploading || images.length >= 5}
+          onChange={(e) => { onAdd(e.target.files); e.target.value = ""; }}
+        />
+      </div>
+      {images.length > 0 && (
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+          {images.map((src, i) => (
+            <div key={i} className="relative group aspect-square rounded-xl overflow-hidden border border-border">
+              {/* eslint-disable-next-line */}
+              <img src={src} alt={`anexo ${i + 1}`} className="w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={() => onRemove(i)}
+                className="absolute top-1 right-1 p-1 rounded-lg bg-black/60 text-white opacity-0 group-hover:opacity-100 transition"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ImageGrid({ images }) {
+  const [preview, setPreview] = useState(null);
+  return (
+    <>
+      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mt-3">
+        {images.map((src, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => setPreview(src)}
+            className="aspect-square rounded-xl overflow-hidden border border-border hover:opacity-90 transition"
+          >
+            {/* eslint-disable-next-line */}
+            <img src={src} alt={`anexo ${i + 1}`} className="w-full h-full object-cover" />
+          </button>
+        ))}
+      </div>
+      {preview && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
+          onClick={() => setPreview(null)}
+        >
+          <button
+            onClick={() => setPreview(null)}
+            className="absolute top-4 right-4 p-2 rounded-xl bg-white/10 text-white hover:bg-white/20"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          {/* eslint-disable-next-line */}
+          <img src={preview} alt="preview" className="max-w-full max-h-full rounded-2xl" />
+        </div>
+      )}
+    </>
   );
 }

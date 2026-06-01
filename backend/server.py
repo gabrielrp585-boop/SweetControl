@@ -180,7 +180,7 @@ class RecipeIngredient(BaseModel):
 class DoughIn(BaseModel):
     name: str
     category: Literal["massa", "recheio", "cobertura"] = "massa"
-    ring_size: Optional[int] = None  # 10, 15, 20, 25, 30 (optional ref)
+    ring_sizes: List[int] = []  # multiple rings supported
     yield_servings: float = 1.0
     ingredients: List[RecipeIngredient] = []
     notes: str = ""
@@ -189,6 +189,27 @@ class DoughIn(BaseModel):
 class Dough(DoughIn):
     id: str
     total_cost: float = 0.0
+    created_at: str
+
+
+# ---- Cakes (bolo montado) ----
+class CakeIn(BaseModel):
+    name: str
+    ring_size: int = 20
+    dough_id: str = ""
+    filling_ids: List[str] = []
+    coating_id: Optional[str] = None
+    extra_cost: float = 0.0  # decoração, embalagem, etc
+    margin_percent: float = 100.0
+
+
+class Cake(CakeIn):
+    id: str
+    total_cost: float = 0.0
+    final_price: float = 0.0
+    dough_name: str = ""
+    filling_names: List[str] = []
+    coating_name: str = ""
     created_at: str
 
 
@@ -504,6 +525,90 @@ async def delete_dough(did: str, user=Depends(get_current_user)):
 
 
 # ============================================================================
+# CAKES (construtor de bolo)
+# ============================================================================
+async def _compute_cake(payload: CakeIn) -> dict:
+    """Calcula custo, preço e nomes a partir das referências."""
+    dough_name = ""
+    filling_names = []
+    coating_name = ""
+    total = float(payload.extra_cost or 0)
+
+    if payload.dough_id:
+        d = await db.doughs.find_one({"id": payload.dough_id}, {"_id": 0})
+        if d:
+            dough_name = d.get("name", "")
+            total += float(d.get("total_cost", 0))
+
+    for fid in payload.filling_ids:
+        f = await db.doughs.find_one({"id": fid}, {"_id": 0})
+        if f:
+            filling_names.append(f.get("name", ""))
+            total += float(f.get("total_cost", 0))
+
+    if payload.coating_id:
+        c = await db.doughs.find_one({"id": payload.coating_id}, {"_id": 0})
+        if c:
+            coating_name = c.get("name", "")
+            total += float(c.get("total_cost", 0))
+
+    margin = float(payload.margin_percent or 0)
+    final_price = round(total * (1 + margin / 100), 2)
+
+    return {
+        "dough_name": dough_name,
+        "filling_names": filling_names,
+        "coating_name": coating_name,
+        "total_cost": round(total, 2),
+        "final_price": final_price,
+    }
+
+
+@api.get("/cakes", response_model=List[Cake])
+async def list_cakes(user=Depends(get_current_user)):
+    return await db.cakes.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+@api.post("/cakes/preview")
+async def preview_cake(payload: CakeIn, user=Depends(get_current_user)):
+    """Calcula sem salvar — usado para exibir custo/preço em tempo real."""
+    return await _compute_cake(payload)
+
+
+@api.post("/cakes", response_model=Cake)
+async def create_cake(payload: CakeIn, user=Depends(get_current_user)):
+    computed = await _compute_cake(payload)
+    doc = {
+        **payload.model_dump(),
+        **computed,
+        "id": new_id(),
+        "created_at": now_iso(),
+    }
+    await db.cakes.insert_one(doc.copy())
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/cakes/{cid}", response_model=Cake)
+async def update_cake(cid: str, payload: CakeIn, user=Depends(get_current_user)):
+    computed = await _compute_cake(payload)
+    await db.cakes.update_one(
+        {"id": cid},
+        {"$set": {**payload.model_dump(), **computed}},
+    )
+    doc = await db.cakes.find_one({"id": cid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Bolo não encontrado")
+    return doc
+
+
+@api.delete("/cakes/{cid}")
+async def delete_cake(cid: str, user=Depends(get_current_user)):
+    await db.cakes.delete_one({"id": cid})
+    return {"ok": True}
+
+
+# ============================================================================
 # PRICES
 # ============================================================================
 @api.get("/prices", response_model=List[PriceRow])
@@ -755,6 +860,7 @@ async def reply_ticket(tid: str, payload: SupportReplyIn, user=Depends(get_curre
         "author_name": user.get("name", ""),
         "author_email": user.get("email", ""),
         "message": payload.message,
+        "images": payload.images or [],
         "created_at": now_iso(),
     }
     replies = ticket.get("replies", []) + [reply]
