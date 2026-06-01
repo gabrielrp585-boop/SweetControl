@@ -34,12 +34,12 @@ export default function Doughs() {
   const [tab, setTab] = useState("recipes"); // recipes | builder
 
   const load = async () => {
-    const [d, i, c] = await Promise.all([
+    const [d, i, c] = await Promise.allSettled([
       api.get("/doughs"), api.get("/ingredients"), api.get("/cakes"),
     ]);
-    setDoughs(d.data);
-    setIngredients(i.data);
-    setCakes(c.data);
+    setDoughs(d.status === "fulfilled" ? d.value.data : []);
+    setIngredients(i.status === "fulfilled" ? i.value.data : []);
+    setCakes(c.status === "fulfilled" ? c.value.data : []);
   };
   useEffect(() => { load(); }, []);
 
