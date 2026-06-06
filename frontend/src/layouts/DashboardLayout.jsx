@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, ClipboardList, ShoppingBag, Wheat, Tags,
   Package, Users, FileBarChart2, Settings as SettingsIcon, LifeBuoy,
-  LogOut, Moon, Sun, Menu, X, Cake,
+  LogOut, Moon, Sun, Menu, X, Cake, Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -18,6 +18,7 @@ const nav = [
   { to: "/estoque", icon: Package, label: "Estoque", id: "inventory" },
   { to: "/clientes", icon: Users, label: "Clientes", id: "customers" },
   { to: "/relatorios", icon: FileBarChart2, label: "Relatórios", id: "reports" },
+  { to: "/mikaa", icon: Sparkles, label: "Mikaa", id: "mikaa", accent: true },
   { to: "/suporte", icon: LifeBuoy, label: "Suporte", id: "support" },
   { to: "/configuracoes", icon: SettingsIcon, label: "Configurações", id: "settings" },
 ];

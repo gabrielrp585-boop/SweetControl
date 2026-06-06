@@ -57,3 +57,4 @@ Sistema completo de gestão para confeitarias — encomendas, vendas, custos, es
 
 - **Email:** `admin@sweetcontrol.com`
 - **Senha:** `sweet123`
+# hispy

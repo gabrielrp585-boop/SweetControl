@@ -5,8 +5,10 @@ import "@/App.css";
 
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { MikaaProvider } from "@/context/MikaaContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import DashboardLayout from "@/layouts/DashboardLayout";
+import { MikaaFab, MikaaPanel } from "@/components/Mikaa";
 
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
@@ -19,10 +21,15 @@ import Customers from "@/pages/Customers";
 import Reports from "@/pages/Reports";
 import Settings from "@/pages/Settings";
 import Support from "@/pages/Support";
+import MikaaPage from "@/pages/Mikaa";
 
 const Protected = ({ children }) => (
   <ProtectedRoute>
-    <DashboardLayout>{children}</DashboardLayout>
+    <MikaaProvider>
+      <DashboardLayout>{children}</DashboardLayout>
+      <MikaaFab />
+      <MikaaPanel />
+    </MikaaProvider>
   </ProtectedRoute>
 );
 
@@ -41,6 +48,7 @@ export default function App() {
             <Route path="/estoque" element={<Protected><Inventory /></Protected>} />
             <Route path="/clientes" element={<Protected><Customers /></Protected>} />
             <Route path="/relatorios" element={<Protected><Reports /></Protected>} />
+            <Route path="/mikaa" element={<Protected><MikaaPage /></Protected>} />
             <Route path="/suporte" element={<Protected><Support /></Protected>} />
             <Route path="/configuracoes" element={<Protected><Settings /></Protected>} />
           </Routes>

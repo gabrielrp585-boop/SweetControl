@@ -1156,6 +1156,10 @@ async def shutdown():
 # Mount router
 app.include_router(api)
 
+# Mount Mikaa (IA assistant) router
+from mikaa import create_mikaa_router  # noqa: E402
+app.include_router(create_mikaa_router(db, get_current_user), prefix="/api")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
