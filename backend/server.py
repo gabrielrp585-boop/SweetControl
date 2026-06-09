@@ -300,10 +300,12 @@ class SupportTicketIn(BaseModel):
     message: str
     category: Literal["bug", "duvida", "sugestao", "outro"] = "bug"
     priority: Literal["baixa", "media", "alta"] = "media"
+    images: List[str] = []
 
 
 class SupportReplyIn(BaseModel):
     message: str
+    images: List[str] = []
 
 
 class SupportTicket(BaseModel):
@@ -315,6 +317,7 @@ class SupportTicket(BaseModel):
     status: Literal["aberto", "em_andamento", "resolvido", "fechado"] = "aberto"
     author_name: str
     author_email: str
+    images: List[str] = []
     replies: List[dict] = []
     created_at: str
     updated_at: str
