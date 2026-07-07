@@ -281,6 +281,37 @@ class TestOrders:
             if c["name"] == "TEST_Order_Client":
                 auth_session.delete(f"{API}/customers/{c['id']}")
 
+    def test_finalized_order_creates_sale_once(self, auth_session):
+        payload = {"customer_name": "TEST_Order_Sale", "phone": "9", "address": "X",
+                   "delivery_date": "2026-02-16", "ring_size": 24, "dough": "Baunilha",
+                   "fillings": ["Doce de leite"], "observations": "", "total": 85.0,
+                   "status": "pendente"}
+        r = auth_session.post(f"{API}/orders", json=payload)
+        assert r.status_code == 200, r.text
+        oid = r.json()["id"]
+
+        r = auth_session.put(f"{API}/orders/{oid}", json={**payload, "status": "finalizado"})
+        assert r.status_code == 200
+
+        sales = auth_session.get(f"{API}/sales").json()
+        matching_sales = [s for s in sales if s.get("customer_name") == "TEST_Order_Sale"]
+        assert len(matching_sales) == 1
+        assert matching_sales[0]["description"] == "Encomenda TEST_Order_Sale"
+        assert matching_sales[0]["unit_price"] == 85.0
+        assert matching_sales[0]["ring_size"] == 24
+
+        r = auth_session.put(f"{API}/orders/{oid}", json={**payload, "status": "entregue"})
+        assert r.status_code == 200
+
+        sales_after = auth_session.get(f"{API}/sales").json()
+        matching_sales_after = [s for s in sales_after if s.get("customer_name") == "TEST_Order_Sale"]
+        assert len(matching_sales_after) == 1
+
+        auth_session.delete(f"{API}/orders/{oid}")
+        for c in auth_session.get(f"{API}/customers").json():
+            if c["name"] == "TEST_Order_Sale":
+                auth_session.delete(f"{API}/customers/{c['id']}")
+
 
 # ---------------------------------------------------------------------------
 # Sales

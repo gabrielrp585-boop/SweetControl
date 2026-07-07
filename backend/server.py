@@ -256,6 +256,7 @@ class SaleIn(BaseModel):
     cost: float = 0.0
     customer_name: str = ""
     sale_date: str  # ISO date
+    order_id: Optional[str] = None
 
 
 class Sale(SaleIn):
@@ -653,6 +654,39 @@ async def delete_price(pid: str, user=Depends(get_current_user)):
 # ============================================================================
 # ORDERS
 # ============================================================================
+async def _maybe_create_sale_from_finished_order(order_doc: dict):
+    if order_doc.get("status") != "finalizado":
+        return None
+
+    existing_sale = await db.sales.find_one({"order_id": order_doc.get("id")}, {"_id": 0})
+    if existing_sale:
+        return existing_sale
+
+    sale_date = order_doc.get("delivery_date") or order_doc.get("sale_date") or now_iso()[:10]
+    customer_name = order_doc.get("customer_name", "") or ""
+    description = f"Encomenda {customer_name}".strip()
+    unit_price = float(order_doc.get("total", 0) or 0)
+
+    total = round(unit_price * 1, 2)
+    profit = round(total - (0.0 * 1), 2)
+    doc = {
+        "description": description,
+        "ring_size": order_doc.get("ring_size"),
+        "qty": 1,
+        "unit_price": unit_price,
+        "cost": 0.0,
+        "customer_name": customer_name,
+        "sale_date": sale_date,
+        "order_id": order_doc.get("id"),
+        "id": new_id(),
+        "total": total,
+        "profit": profit,
+        "created_at": now_iso(),
+    }
+    await db.sales.insert_one(doc.copy())
+    return doc
+
+
 @api.get("/orders", response_model=List[Order])
 async def list_orders(status: Optional[str] = None, q: Optional[str] = None,
                       user=Depends(get_current_user)):
@@ -678,15 +712,24 @@ async def create_order(payload: OrderIn, user=Depends(get_current_user)):
                 "phone": payload.phone, "address": payload.address, "notes": "",
                 "created_at": now_iso(), "total_spent": 0.0, "order_count": 0,
             })
+    await _maybe_create_sale_from_finished_order(doc)
     return doc
 
 
 @api.put("/orders/{oid}", response_model=Order)
 async def update_order(oid: str, payload: OrderIn, user=Depends(get_current_user)):
-    await db.orders.update_one({"id": oid}, {"$set": payload.model_dump()})
+    existing = await db.orders.find_one({"id": oid}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Encomenda não encontrada")
+
+    data = payload.model_dump()
+    await db.orders.update_one({"id": oid}, {"$set": data})
     doc = await db.orders.find_one({"id": oid}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Encomenda não encontrada")
+
+    if data.get("status") == "finalizado" and existing.get("status") != "finalizado":
+        await _maybe_create_sale_from_finished_order(doc)
     return doc
 
 
