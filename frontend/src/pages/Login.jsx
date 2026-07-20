@@ -145,7 +145,7 @@ export default function Login() {
                     className="pl-10"
                     placeholder="voce@email.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) =>(e.target.value)}
                     required
                     data-testid="input-email"
                   />
@@ -160,7 +160,7 @@ export default function Login() {
                     className="pl-10"
                     placeholder="••••••••"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => (e.target.value)}
                     required
                     minLength={6}
                     data-testid="input-password"
