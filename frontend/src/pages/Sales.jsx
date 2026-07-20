@@ -10,21 +10,23 @@ import {
 export default function Sales() {
   const [sales, setSales] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [recipes, setRecipes] = useState([]);
   const [open, setOpen] = useState(false);
   const [openExp, setOpenExp] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     description: "", ring_size: 20, qty: 1, unit_price: "", cost: "",
-    customer_name: "", sale_date: today,
+    customer_name: "", sale_date: today, recipe_id: "", serving_count: 1,
   });
   const [expForm, setExpForm] = useState({
     description: "", category: "ingredientes", amount: "", expense_date: today,
   });
 
   const load = async () => {
-    const [s, e] = await Promise.all([api.get("/sales"), api.get("/expenses")]);
+    const [s, e, r] = await Promise.all([api.get("/sales"), api.get("/expenses"), api.get("/doughs")]);
     setSales(s.data);
     setExpenses(e.data);
+    setRecipes(r.data);
   };
   useEffect(() => { load(); }, []);
 
@@ -41,10 +43,12 @@ export default function Sales() {
         qty: Number(form.qty),
         unit_price: Number(form.unit_price),
         cost: Number(form.cost || 0),
+        recipe_ids: form.recipe_id ? [form.recipe_id] : [],
+        serving_count: Number(form.serving_count || 1),
       });
       toast.success("Venda registrada!");
       setOpen(false);
-      setForm({ description: "", ring_size: 20, qty: 1, unit_price: "", cost: "", customer_name: "", sale_date: today });
+      setForm({ description: "", ring_size: 20, qty: 1, unit_price: "", cost: "", customer_name: "", sale_date: today, recipe_id: "", serving_count: 1 });
       load();
     } catch {
       toast.error("Erro ao salvar venda");
@@ -263,6 +267,18 @@ export default function Sales() {
             <Label>Quantidade</Label>
             <Input type="number" min="1" required value={form.qty}
               onChange={(e) => setForm({ ...form, qty: e.target.value })} />
+          </div>
+          <div>
+            <Label>Receita / massa</Label>
+            <Select value={form.recipe_id} onChange={(e) => setForm({ ...form, recipe_id: e.target.value })}>
+              <option value="">Sem receita (custo manual)</option>
+              {recipes.map((recipe) => <option key={recipe.id} value={recipe.id}>{recipe.name}</option>)}
+            </Select>
+          </div>
+          <div>
+            <Label>Porções / unidade</Label>
+            <Input type="number" min="0.1" step="0.1" value={form.serving_count}
+              onChange={(e) => setForm({ ...form, serving_count: e.target.value })} />
           </div>
           <div>
             <Label>Preço unitário (R$) *</Label>

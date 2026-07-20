@@ -29,6 +29,8 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 
+from sales_logic import calculate_recipe_cost_and_usage
+
 # ============================================================================
 # CONFIG
 # ============================================================================
@@ -257,6 +259,9 @@ class SaleIn(BaseModel):
     customer_name: str = ""
     sale_date: str  # ISO date
     order_id: Optional[str] = None
+    recipe_ids: List[str] = []
+    serving_count: float = 1.0
+    stock_consumed: List[dict] = []
 
 
 class Sale(SaleIn):
@@ -750,10 +755,60 @@ async def list_sales(user=Depends(get_current_user)):
 @api.post("/sales", response_model=Sale)
 async def create_sale(payload: SaleIn, user=Depends(get_current_user)):
     data = payload.model_dump()
-    total = round(data["unit_price"] * data["qty"], 2)
-    profit = round(total - (data["cost"] * data["qty"]), 2)
+    qty = max(int(data.get("qty") or 1), 1)
+    total = round(float(data["unit_price"]) * qty, 2)
+    calculated_cost = float(data.get("cost") or 0.0)
+    stock_usage = []
+
+    if not calculated_cost and data.get("recipe_ids"):
+        recipes = []
+        for recipe_id in data.get("recipe_ids", []) or []:
+            recipe = await db.doughs.find_one({"id": recipe_id}, {"_id": 0})
+            if recipe:
+                recipes.append(recipe)
+        ingredient_docs = []
+        async for ingredient in db.ingredients.find({}, {"_id": 0}):
+            ingredient_docs.append(ingredient)
+        calculated_cost, usage = calculate_recipe_cost_and_usage(
+            recipes,
+            ingredient_docs,
+            servings=float(data.get("serving_count") or 1.0),
+        )
+        stock_usage = [
+            {
+                "ingredient_id": item.get("ingredient_id"),
+                "ingredient_name": item.get("ingredient_name", ""),
+                "qty": round(float(item.get("qty", 0) or 0) * qty, 4),
+            }
+            for item in usage
+        ]
+
+    if calculated_cost:
+        data["cost"] = round(calculated_cost, 2)
+
+    profit = round(total - (float(data.get("cost") or 0.0) * qty), 2)
     doc = {**data, "id": new_id(), "total": total, "profit": profit, "created_at": now_iso()}
     await db.sales.insert_one(doc.copy())
+
+    if stock_usage:
+        for item in stock_usage:
+            ingredient_id = item.get("ingredient_id")
+            if not ingredient_id:
+                continue
+            ing = await db.ingredients.find_one({"id": ingredient_id}, {"_id": 0})
+            if not ing:
+                continue
+            new_qty = float(ing.get("stock_qty", 0)) - float(item.get("qty", 0))
+            await db.ingredients.update_one({"id": ingredient_id}, {"$set": {"stock_qty": round(new_qty, 4)}})
+            await db.stock_movements.insert_one({
+                "id": new_id(),
+                "ingredient_id": ingredient_id,
+                "ingredient_name": ing.get("name", ""),
+                "delta": -float(item.get("qty", 0)),
+                "reason": f"Venda: {data.get('description', '')}",
+                "created_at": now_iso(),
+            })
+
     doc.pop("_id", None)
     return doc
 
@@ -890,6 +945,7 @@ async def create_ticket(payload: SupportTicketIn, user=Depends(get_current_user)
         "replies": [],
         "created_at": now,
         "updated_at": now,
+        "last_notified_at": None,
     }
     await db.support_tickets.insert_one(doc.copy())
     doc.pop("_id", None)

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, LifeBuoy, Send, MessageCircle, Bug, Lightbulb, HelpCircle, Trash2,
@@ -44,16 +44,53 @@ export default function Support() {
   });
   const [replyImages, setReplyImages] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const previousSnapshotRef = useRef([]);
 
-  const load = async () => {
+  const notifySupportChange = (title, body) => {
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      try {
+        new Notification(title, { body });
+      } catch {
+        // ignore browser notification issues
+      }
+    }
+    toast.info(body, { description: title });
+  };
+
+  const load = async (shouldNotify = false) => {
     const { data } = await api.get("/support");
+    if (shouldNotify && previousSnapshotRef.current.length > 0) {
+      const prevById = new Map(previousSnapshotRef.current.map((ticket) => [ticket.id, ticket]));
+      data.forEach((ticket) => {
+        const previous = prevById.get(ticket.id);
+        if (!previous) {
+          if (ticket.author_email !== user?.email) {
+            notifySupportChange("Novo ticket no suporte", `Novo chamado: ${ticket.subject}`);
+          }
+          return;
+        }
+        const prevReplies = previous.replies?.length || 0;
+        const nextReplies = ticket.replies?.length || 0;
+        if (nextReplies > prevReplies) {
+          const reply = ticket.replies?.[nextReplies - 1];
+          if (reply?.author_email && reply.author_email !== user?.email) {
+            notifySupportChange("Nova mensagem no suporte", reply.message || `Nova resposta em “${ticket.subject}”`);
+          }
+        }
+      });
+    }
+    previousSnapshotRef.current = data;
     setItems(data);
     if (detail) {
       const upd = data.find((t) => t.id === detail.id);
       if (upd) setDetail(upd);
     }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const interval = window.setInterval(() => load(true), 10000);
+    return () => window.clearInterval(interval);
+  }, [user?.email]);
 
   const submit = async (e) => {
     e.preventDefault();
