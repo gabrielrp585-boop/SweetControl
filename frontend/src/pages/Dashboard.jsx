@@ -85,35 +85,35 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <KpiCard
           icon={ShoppingBag}
-          label="Vendido hoje"
-          value={brl(data.total_day)}
-          sub="Total do dia"
-          tint="bg-primary/30"
-          testId="kpi-day"
-        />
-        <KpiCard
-          icon={TrendingUp}
           label="Vendido no mês"
           value={brl(data.total_month)}
-          sub="Receita mensal"
-          tint="bg-secondary/40"
+          sub={`Hoje: ${brl(data.total_day)}`}
+          tint="bg-primary/30"
           testId="kpi-month"
         />
         <KpiCard
-          icon={DollarSign}
-          label="Lucro do mês"
-          value={brl(data.profit_month)}
-          sub="Receita - custos"
-          tint="bg-accent/50"
-          testId="kpi-profit"
+          icon={Package}
+          label="Custo de Produção"
+          value={brl(data.cogs_month || 0)}
+          sub="Ingredientes das vendas"
+          tint="bg-rose-200/40"
+          testId="kpi-cogs"
         />
         <KpiCard
           icon={ClipboardList}
-          label="Encomendas pendentes"
-          value={data.pending_orders}
-          sub={`${data.total_orders} no total`}
-          tint="bg-chart-4/40"
-          testId="kpi-orders"
+          label="Despesas no mês"
+          value={brl(data.expenses_month || 0)}
+          sub="Gastos operacionais"
+          tint="bg-secondary/40"
+          testId="kpi-expenses"
+        />
+        <KpiCard
+          icon={DollarSign}
+          label="Lucro Real Líquido"
+          value={brl(data.profit_month)}
+          sub="Receita - (Custos + Despesas)"
+          tint="bg-emerald-200/40"
+          testId="kpi-profit"
         />
       </div>
 

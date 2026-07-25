@@ -659,6 +659,68 @@ async def delete_price(pid: str, user=Depends(get_current_user)):
 # ============================================================================
 # ORDERS
 # ============================================================================
+async def compute_order_cost_and_deduct_stock(order_doc: dict):
+    """Calcula o custo total de produção de uma encomenda e subtrai os ingredientes do estoque."""
+    total_cost = 0.0
+    stock_deductions = []
+
+    # 1. Bolo (cake_id)
+    cake_id = order_doc.get("cake_id")
+    if cake_id:
+        cake = await db.cakes.find_one({"id": cake_id}, {"_id": 0})
+        if cake:
+            total_cost += float(cake.get("total_cost", 0) or 0)
+            dough_ids = []
+            if cake.get("dough_id"): dough_ids.append(cake["dough_id"])
+            if cake.get("filling_ids"): dough_ids.extend(cake["filling_ids"])
+            if cake.get("coating_id"): dough_ids.append(cake["coating_id"])
+            for did in dough_ids:
+                d = await db.doughs.find_one({"id": did}, {"_id": 0})
+                if d:
+                    for item in d.get("ingredients", []):
+                        stock_deductions.append({
+                            "ingredient_id": item.get("ingredient_id"),
+                            "qty": float(item.get("qty", 0) or 0),
+                        })
+
+    # 2. Massas / Recheios diretos
+    direct_dough_ids = []
+    if order_doc.get("dough_id"): direct_dough_ids.append(order_doc["dough_id"])
+    if order_doc.get("filling_ids"): direct_dough_ids.extend(order_doc["filling_ids"])
+    if order_doc.get("coating_id"): direct_dough_ids.append(order_doc["coating_id"])
+
+    for did in direct_dough_ids:
+        d = await db.doughs.find_one({"id": did}, {"_id": 0})
+        if d:
+            total_cost += float(d.get("total_cost", 0) or 0)
+            for item in d.get("ingredients", []):
+                stock_deductions.append({
+                    "ingredient_id": item.get("ingredient_id"),
+                    "qty": float(item.get("qty", 0) or 0),
+                })
+
+    # 3. Dar baixa nos ingredientes do estoque
+    customer_name = order_doc.get("customer_name", "") or ""
+    for item in stock_deductions:
+        ing_id = item.get("ingredient_id")
+        qty = float(item.get("qty", 0) or 0)
+        if ing_id and qty > 0:
+            ing = await db.ingredients.find_one({"id": ing_id}, {"_id": 0})
+            if ing:
+                new_qty = float(ing.get("stock_qty", 0) or 0) - qty
+                await db.ingredients.update_one({"id": ing_id}, {"$set": {"stock_qty": round(new_qty, 4)}})
+                await db.stock_movements.insert_one({
+                    "id": new_id(),
+                    "ingredient_id": ing_id,
+                    "ingredient_name": ing.get("name", ""),
+                    "delta": -qty,
+                    "reason": f"Encomenda Finalizada: {customer_name}".strip(),
+                    "created_at": now_iso(),
+                })
+
+    return round(total_cost, 2), stock_deductions
+
+
 async def _maybe_create_sale_from_finished_order(order_doc: dict):
     if order_doc.get("status") != "finalizado":
         return None
@@ -673,13 +735,15 @@ async def _maybe_create_sale_from_finished_order(order_doc: dict):
     unit_price = float(order_doc.get("total", 0) or 0)
 
     total = round(unit_price * 1, 2)
-    profit = round(total - (0.0 * 1), 2)
+    cost, _ = await compute_order_cost_and_deduct_stock(order_doc)
+    profit = round(total - cost, 2)
+
     doc = {
         "description": description,
         "ring_size": order_doc.get("ring_size"),
         "qty": 1,
         "unit_price": unit_price,
-        "cost": 0.0,
+        "cost": cost,
         "customer_name": customer_name,
         "sale_date": sale_date,
         "order_id": order_doc.get("id"),
@@ -855,8 +919,14 @@ async def dashboard(user=Depends(get_current_user)):
 
     total_day = sum(s.get("total", 0) for s in sales if s.get("sale_date", "").startswith(today))
     total_month = sum(s.get("total", 0) for s in sales if s.get("sale_date", "").startswith(month_prefix))
-    profit_month = sum(s.get("profit", 0) for s in sales if s.get("sale_date", "").startswith(month_prefix))
-    expenses_month = sum(e.get("amount", 0) for e in expenses if e.get("expense_date", "").startswith(month_prefix))
+    
+    # Custo de Produção (CPV) e Lucro Bruto das Vendas
+    cogs_month = sum(float(s.get("cost", 0) or 0) * int(s.get("qty", 1) or 1) for s in sales if s.get("sale_date", "").startswith(month_prefix))
+    sales_gross_profit = sum(float(s.get("profit", 0) or 0) for s in sales if s.get("sale_date", "").startswith(month_prefix))
+    expenses_month = sum(float(e.get("amount", 0) or 0) for e in expenses if e.get("expense_date", "").startswith(month_prefix))
+    
+    # Lucro Real Líquido = Lucro Bruto das Vendas - Despesas Operacionais do Mês
+    profit_month = round(sales_gross_profit - expenses_month, 2)
     pending_orders = len([o for o in orders if o.get("status") in ("pendente", "em_preparo")])
 
     # Top products
@@ -869,19 +939,21 @@ async def dashboard(user=Depends(get_current_user)):
         key=lambda x: x["qty"], reverse=True
     )[:5]
 
-    # Last 7 days chart
+    # Last 7 days chart (Lucro Real diário = Lucro Vendas - Despesas)
     sales_chart = []
     expenses_chart = []
     profit_chart = []
     for i in range(6, -1, -1):
         d = (datetime.now(timezone.utc) - timedelta(days=i)).date().isoformat()
         day_sales = sum(s.get("total", 0) for s in sales if s.get("sale_date", "").startswith(d))
-        day_profit = sum(s.get("profit", 0) for s in sales if s.get("sale_date", "").startswith(d))
+        day_gross_profit = sum(s.get("profit", 0) for s in sales if s.get("sale_date", "").startswith(d))
         day_exp = sum(e.get("amount", 0) for e in expenses if e.get("expense_date", "").startswith(d))
+        day_real_profit = round(day_gross_profit - day_exp, 2)
+
         label = datetime.fromisoformat(d).strftime("%d/%m")
         sales_chart.append({"day": label, "value": round(day_sales, 2)})
         expenses_chart.append({"day": label, "value": round(day_exp, 2)})
-        profit_chart.append({"day": label, "value": round(day_profit, 2)})
+        profit_chart.append({"day": label, "value": day_real_profit})
 
     # Low stock alerts
     low_stock = []
@@ -893,8 +965,9 @@ async def dashboard(user=Depends(get_current_user)):
     return {
         "total_day": round(total_day, 2),
         "total_month": round(total_month, 2),
-        "profit_month": round(profit_month, 2),
+        "cogs_month": round(cogs_month, 2),
         "expenses_month": round(expenses_month, 2),
+        "profit_month": profit_month, # Lucro Real Líquido
         "pending_orders": pending_orders,
         "total_orders": len(orders),
         "top_products": top_products,
@@ -1173,8 +1246,37 @@ async def report_expenses(fmt: str, user=Depends(get_current_user)):
     raise HTTPException(status_code=400, detail="Formato inválido")
 
 
-@api.get("/reports/orders/{fmt}")
-async def report_orders(fmt: str, user=Depends(get_current_user)):
+@api.get("/reports/financial/{fmt}")
+async def report_financial(fmt: str, user=Depends(get_current_user)):
+    sales = await db.sales.find({}, {"_id": 0}).to_list(10000)
+    expenses = await db.expenses.find({}, {"_id": 0}).to_list(10000)
+
+    total_sales = sum(float(s.get("total", 0) or 0) for s in sales)
+    total_cogs = sum(float(s.get("cost", 0) or 0) * int(s.get("qty", 1) or 1) for s in sales)
+    gross_profit = sum(float(s.get("profit", 0) or 0) for s in sales)
+    total_expenses = sum(float(e.get("amount", 0) or 0) for e in expenses)
+    net_profit = round(gross_profit - total_expenses, 2)
+
+    headers = ["Indicador Financeiro", "Valor (R$)"]
+    rows = [
+        ["1. Receita Bruta Total (Vendas)", f"R$ {total_sales:.2f}"],
+        ["2. Custo dos Produtos Vendidos (Ingredientes)", f"R$ {total_cogs:.2f}"],
+        ["3. Lucro Bruto de Vendas", f"R$ {gross_profit:.2f}"],
+        ["4. Despesas Operacionais Totais", f"R$ {total_expenses:.2f}"],
+        ["5. LUCRO REAL LÍQUIDO FINAL", f"R$ {net_profit:.2f}"],
+    ]
+
+    if fmt == "pdf":
+        data = _build_pdf("Demonstrativo Financeiro - Lucro Real", headers, rows)
+        return StreamingResponse(io.BytesIO(data), media_type="application/pdf",
+                                 headers={"Content-Disposition": "attachment; filename=lucro_real_dre.pdf"})
+    elif fmt == "xlsx":
+        data = _build_xlsx("Lucro Real", headers, rows)
+        return StreamingResponse(io.BytesIO(data),
+                                 media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                 headers={"Content-Disposition": "attachment; filename=lucro_real_dre.xlsx"})
+    raise HTTPException(status_code=400, detail="Formato inválido")
+
     items = await db.orders.find({}, {"_id": 0}).sort("delivery_date", -1).to_list(5000)
     headers = ["Entrega", "Cliente", "Telefone", "Aro", "Massa", "Status", "Total"]
     rows = [[o.get("delivery_date", ""), o.get("customer_name", ""), o.get("phone", ""),
