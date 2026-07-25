@@ -1,15 +1,22 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { FileText, FileSpreadsheet, ShoppingBag, Receipt, ClipboardList } from "lucide-react";
+import { FileText, FileSpreadsheet, ShoppingBag, Receipt, ClipboardList, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { API } from "@/services/api";
 import { PageHeader, Card, Button } from "@/components/ui-kit";
 
 const REPORTS = [
   {
+    key: "financial",
+    title: "Demonstrativo Lucro Real",
+    description: "DRE completo: Receita Bruta, Custo dos Produtos Vendidos, Despesas e Lucro Real.",
+    icon: DollarSign,
+    color: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
+  },
+  {
     key: "sales",
     title: "Vendas",
-    description: "Histórico completo de vendas com totais e lucro.",
+    description: "Histórico completo de vendas com totais e custo.",
     icon: ShoppingBag,
     color: "bg-primary/20",
   },
