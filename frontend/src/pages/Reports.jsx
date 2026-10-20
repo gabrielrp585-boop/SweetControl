@@ -1,9 +1,9 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { FileText, FileSpreadsheet, ShoppingBag, Receipt, ClipboardList, DollarSign } from "lucide-react";
 import { toast } from "sonner";
-import { API } from "@/services/api";
-import { PageHeader, Card, Button } from "@/components/ui-kit";
+import { api } from "@/services/api";
+import { PageHeader, Card, Button, Label, Select } from "@/components/ui-kit";
 
 const REPORTS = [
   {
@@ -16,39 +16,50 @@ const REPORTS = [
   {
     key: "sales",
     title: "Vendas",
-    description: "Histórico completo de vendas com totais e custo.",
+    description: "Vendas da competência selecionada com totais e custos.",
     icon: ShoppingBag,
     color: "bg-primary/20",
   },
   {
     key: "expenses",
     title: "Gastos",
-    description: "Lançamentos de despesas por categoria e data.",
+    description: "Despesas da competência selecionada por categoria e data.",
     icon: Receipt,
     color: "bg-secondary/30",
   },
   {
     key: "orders",
     title: "Encomendas",
-    description: "Listagem de pedidos com status, cliente e total.",
+    description: "Pedidos do mês selecionado com status, cliente e total.",
     icon: ClipboardList,
     color: "bg-accent/40",
   },
 ];
 
 export default function Reports() {
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const [month, setMonth] = useState(currentMonth);
+  const [months, setMonths] = useState([currentMonth]);
+
+  useEffect(() => {
+    api.get("/reports/months")
+      .then(({ data }) => setMonths(data.includes(month) ? data : [month, ...data]))
+      .catch(() => {});
+  }, [month]);
+
   const download = async (key, fmt) => {
     try {
-      const res = await fetch(`${API}/reports/${key}/${fmt}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Falha");
-      const blob = await res.blob();
+      const { data: blob } = await api.get(`/reports/${key}/${fmt}`, {
+        params: { month },
+        responseType: "blob",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${key}.${fmt}`;
+      a.download = `${key}-${month}.${fmt}`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success(`Relatório ${fmt.toUpperCase()} gerado`);
+      toast.success(`Relatório de ${month} gerado`);
     } catch {
       toast.error("Erro ao gerar relatório");
     }
@@ -58,7 +69,19 @@ export default function Reports() {
     <div>
       <PageHeader
         title="Relatórios"
-        subtitle="Exporte os dados da sua confeitaria em PDF ou Excel."
+        subtitle="Consulte e exporte os dados financeiros por mês. Os lançamentos anteriores permanecem disponíveis."
+        action={
+          <div className="min-w-48">
+            <Label htmlFor="report-month">Competência</Label>
+            <Select id="report-month" value={month} onChange={(event) => setMonth(event.target.value)}>
+              {months.map((value) => (
+                <option key={value} value={value}>
+                  {new Date(`${value}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                </option>
+              ))}
+            </Select>
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

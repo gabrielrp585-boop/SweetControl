@@ -300,6 +300,14 @@ class TestOrders:
         assert matching_sales[0]["unit_price"] == 85.0
         assert matching_sales[0]["ring_size"] == 24
 
+        updated_payload = {**payload, "total": 95.0, "status": "finalizado"}
+        r = auth_session.put(f"{API}/orders/{oid}", json=updated_payload)
+        assert r.status_code == 200
+        updated_sale = next(s for s in auth_session.get(f"{API}/sales").json()
+                    if s.get("order_id") == oid)
+        assert updated_sale["unit_price"] == 95.0
+        assert updated_sale["total"] == 95.0
+
         r = auth_session.put(f"{API}/orders/{oid}", json={**payload, "status": "entregue"})
         assert r.status_code == 200
 
@@ -333,6 +341,31 @@ class TestSales:
         _no_underscore_id(r.json())
 
         auth_session.delete(f"{API}/sales/{sid}")
+
+    def test_customer_totals_use_sales_and_keep_order_count_separate(self, auth_session):
+        customer_name = f"TEST_Customer_{uuid.uuid4().hex[:8]}"
+        sale = auth_session.post(f"{API}/sales", json={
+            "description": "TEST_Customer_Sale", "qty": 2, "unit_price": 50,
+            "cost": 10, "customer_name": customer_name, "sale_date": "2026-03-10",
+        })
+        assert sale.status_code == 200, sale.text
+        sale_id = sale.json()["id"]
+
+        order = auth_session.post(f"{API}/orders", json={
+            "customer_name": customer_name, "delivery_date": "2026-03-12",
+            "total": 80, "status": "pendente",
+        })
+        assert order.status_code == 200, order.text
+        order_id = order.json()["id"]
+
+        customer = next(c for c in auth_session.get(f"{API}/customers").json()
+                        if c["name"] == customer_name)
+        assert customer["total_spent"] == 100.0
+        assert customer["order_count"] == 1
+
+        auth_session.delete(f"{API}/sales/{sale_id}")
+        auth_session.delete(f"{API}/orders/{order_id}")
+        auth_session.delete(f"{API}/customers/{customer['id']}")
 
 
 # ---------------------------------------------------------------------------
@@ -407,6 +440,16 @@ class TestReports:
         cd = r.headers.get("content-disposition", "")
         assert "attachment" in cd and fmt in cd
         assert len(r.content) > 100
+
+    def test_monthly_report_months_and_filtered_exports(self, auth_session):
+        months = auth_session.get(f"{API}/reports/months")
+        assert months.status_code == 200
+        assert all(len(month) == 7 and month[4] == "-" for month in months.json())
+
+        for kind in ["sales", "expenses", "financial", "orders"]:
+            response = auth_session.get(f"{API}/reports/{kind}/xlsx", params={"month": "2026-01"})
+            assert response.status_code == 200, f"{kind}: {response.text[:200]}"
+            assert "spreadsheetml" in response.headers.get("content-type", "")
 
 
 # ---------------------------------------------------------------------------

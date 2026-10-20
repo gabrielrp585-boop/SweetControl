@@ -7,6 +7,8 @@ import React, { useEffect, useRef } from "react";
  */
 export function ConfectioneryParticles({ mouse }) {
   const canvasRef = useRef(null);
+  const mouseRef = useRef(mouse);
+  mouseRef.current = mouse;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -83,9 +85,10 @@ export function ConfectioneryParticles({ mouse }) {
         if (p.x > width + 20) p.x = -20;
 
         // Mouse interaction (gentle repulsion)
-        if (mouse && mouse.x) {
-          const dx = p.x - mouse.x;
-          const dy = p.y - mouse.y;
+        const currentMouse = mouseRef.current;
+        if (currentMouse && currentMouse.x) {
+          const dx = p.x - currentMouse.x;
+          const dy = p.y - currentMouse.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
           const maxDist = 160;
 
@@ -141,7 +144,7 @@ export function ConfectioneryParticles({ mouse }) {
       window.removeEventListener("resize", handleResize);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [mouse]);
+  }, []);
 
   return (
     <canvas

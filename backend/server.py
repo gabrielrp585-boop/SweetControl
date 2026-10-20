@@ -393,13 +393,14 @@ async def me(user: dict = Depends(get_current_user)):
 @api.get("/customers", response_model=List[Customer])
 async def list_customers(user=Depends(get_current_user)):
     items = await db.customers.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
-    # enrich with totals
     for c in items:
-        sales_cursor = db.orders.find({"customer_name": c["name"]}, {"_id": 0, "total": 1})
+        sales_cursor = db.sales.find({"customer_name": c["name"]}, {"_id": 0, "total": 1})
+        orders_cursor = db.orders.find({"customer_name": c["name"]}, {"_id": 0, "id": 1})
         total = 0.0
         cnt = 0
         async for s in sales_cursor:
             total += float(s.get("total", 0))
+        async for _ in orders_cursor:
             cnt += 1
         c["total_spent"] = round(total, 2)
         c["order_count"] = cnt
@@ -722,12 +723,9 @@ async def compute_order_cost_and_deduct_stock(order_doc: dict):
 
 
 async def _maybe_create_sale_from_finished_order(order_doc: dict):
-    if order_doc.get("status") != "finalizado":
-        return None
-
     existing_sale = await db.sales.find_one({"order_id": order_doc.get("id")}, {"_id": 0})
-    if existing_sale:
-        return existing_sale
+    if not existing_sale and order_doc.get("status") != "finalizado":
+        return None
 
     sale_date = order_doc.get("delivery_date") or order_doc.get("sale_date") or now_iso()[:10]
     customer_name = order_doc.get("customer_name", "") or ""
@@ -735,6 +733,22 @@ async def _maybe_create_sale_from_finished_order(order_doc: dict):
     unit_price = float(order_doc.get("total", 0) or 0)
 
     total = round(unit_price * 1, 2)
+    if existing_sale:
+        cost = float(existing_sale.get("cost", 0) or 0)
+        await db.sales.update_one(
+            {"id": existing_sale["id"]},
+            {"$set": {
+                "description": description,
+                "ring_size": order_doc.get("ring_size"),
+                "unit_price": unit_price,
+                "customer_name": customer_name,
+                "sale_date": sale_date,
+                "total": total,
+                "profit": round(total - cost, 2),
+            }},
+        )
+        return await db.sales.find_one({"id": existing_sale["id"]}, {"_id": 0})
+
     cost, _ = await compute_order_cost_and_deduct_stock(order_doc)
     profit = round(total - cost, 2)
 
@@ -797,8 +811,19 @@ async def update_order(oid: str, payload: OrderIn, user=Depends(get_current_user
     if not doc:
         raise HTTPException(status_code=404, detail="Encomenda não encontrada")
 
-    if data.get("status") == "finalizado" and existing.get("status") != "finalizado":
-        await _maybe_create_sale_from_finished_order(doc)
+    if doc.get("customer_name"):
+        customer_name = doc["customer_name"].strip()
+        if customer_name != doc["customer_name"]:
+            doc["customer_name"] = customer_name
+            await db.orders.update_one({"id": oid}, {"$set": {"customer_name": customer_name}})
+        if not await db.customers.find_one({"name": customer_name}):
+            await db.customers.insert_one({
+                "id": new_id(), "name": customer_name, "phone": doc.get("phone", ""),
+                "address": doc.get("address", ""), "notes": "", "created_at": now_iso(),
+                "total_spent": 0.0, "order_count": 0,
+            })
+
+    await _maybe_create_sale_from_finished_order(doc)
     return doc
 
 
@@ -819,6 +844,7 @@ async def list_sales(user=Depends(get_current_user)):
 @api.post("/sales", response_model=Sale)
 async def create_sale(payload: SaleIn, user=Depends(get_current_user)):
     data = payload.model_dump()
+    data["customer_name"] = (data.get("customer_name") or "").strip()
     qty = max(int(data.get("qty") or 1), 1)
     total = round(float(data["unit_price"]) * qty, 2)
     calculated_cost = float(data.get("cost") or 0.0)
@@ -853,6 +879,13 @@ async def create_sale(payload: SaleIn, user=Depends(get_current_user)):
     profit = round(total - (float(data.get("cost") or 0.0) * qty), 2)
     doc = {**data, "id": new_id(), "total": total, "profit": profit, "created_at": now_iso()}
     await db.sales.insert_one(doc.copy())
+
+    customer_name = (data.get("customer_name") or "").strip()
+    if customer_name and not await db.customers.find_one({"name": customer_name}):
+        await db.customers.insert_one({
+            "id": new_id(), "name": customer_name, "phone": "", "address": "", "notes": "",
+            "created_at": now_iso(), "total_spent": 0.0, "order_count": 0,
+        })
 
     if stock_usage:
         for item in stock_usage:
@@ -1209,9 +1242,22 @@ def _build_xlsx(title: str, headers: List[str], rows: List[List]) -> bytes:
     return buf.read()
 
 
+@api.get("/reports/months")
+async def report_months(user=Depends(get_current_user)):
+    months = {_current_month()}
+    sources = ((db.sales, "sale_date"), (db.expenses, "expense_date"), (db.orders, "delivery_date"))
+    for collection, field in sources:
+        async for item in collection.find({}, {"_id": 0, field: 1}):
+            value = item.get(field, "")
+            if len(value) >= 7 and value[4:5] == "-":
+                months.add(value[:7])
+    return sorted(months, reverse=True)
+
+
 @api.get("/reports/sales/{fmt}")
-async def report_sales(fmt: str, user=Depends(get_current_user)):
-    sales = await db.sales.find({}, {"_id": 0}).sort("sale_date", -1).to_list(5000)
+async def report_sales(fmt: str, month: Optional[str] = Query(default=None, regex=r"^\d{4}-(0[1-9]|1[0-2])$"), user=Depends(get_current_user)):
+    query = {"sale_date": {"$regex": f"^{month}"}} if month else {}
+    sales = await db.sales.find(query, {"_id": 0}).sort("sale_date", -1).to_list(5000)
     headers = ["Data", "Descrição", "Aro", "Qtd", "Preço Un.", "Custo", "Total", "Lucro"]
     rows = [[s.get("sale_date", ""), s.get("description", ""), s.get("ring_size") or "-",
              s.get("qty", 0), f"R$ {s.get('unit_price', 0):.2f}", f"R$ {s.get('cost', 0):.2f}",
@@ -1229,8 +1275,9 @@ async def report_sales(fmt: str, user=Depends(get_current_user)):
 
 
 @api.get("/reports/expenses/{fmt}")
-async def report_expenses(fmt: str, user=Depends(get_current_user)):
-    items = await db.expenses.find({}, {"_id": 0}).sort("expense_date", -1).to_list(5000)
+async def report_expenses(fmt: str, month: Optional[str] = Query(default=None, regex=r"^\d{4}-(0[1-9]|1[0-2])$"), user=Depends(get_current_user)):
+    query = {"expense_date": {"$regex": f"^{month}"}} if month else {}
+    items = await db.expenses.find(query, {"_id": 0}).sort("expense_date", -1).to_list(5000)
     headers = ["Data", "Descrição", "Categoria", "Valor"]
     rows = [[i.get("expense_date", ""), i.get("description", ""), i.get("category", ""),
              f"R$ {i.get('amount', 0):.2f}"] for i in items]
@@ -1247,9 +1294,11 @@ async def report_expenses(fmt: str, user=Depends(get_current_user)):
 
 
 @api.get("/reports/financial/{fmt}")
-async def report_financial(fmt: str, user=Depends(get_current_user)):
-    sales = await db.sales.find({}, {"_id": 0}).to_list(10000)
-    expenses = await db.expenses.find({}, {"_id": 0}).to_list(10000)
+async def report_financial(fmt: str, month: Optional[str] = Query(default=None, regex=r"^\d{4}-(0[1-9]|1[0-2])$"), user=Depends(get_current_user)):
+    sales_query = {"sale_date": {"$regex": f"^{month}"}} if month else {}
+    expenses_query = {"expense_date": {"$regex": f"^{month}"}} if month else {}
+    sales = await db.sales.find(sales_query, {"_id": 0}).to_list(10000)
+    expenses = await db.expenses.find(expenses_query, {"_id": 0}).to_list(10000)
 
     total_sales = sum(float(s.get("total", 0) or 0) for s in sales)
     total_cogs = sum(float(s.get("cost", 0) or 0) * int(s.get("qty", 1) or 1) for s in sales)
@@ -1277,7 +1326,10 @@ async def report_financial(fmt: str, user=Depends(get_current_user)):
                                  headers={"Content-Disposition": "attachment; filename=lucro_real_dre.xlsx"})
     raise HTTPException(status_code=400, detail="Formato inválido")
 
-    items = await db.orders.find({}, {"_id": 0}).sort("delivery_date", -1).to_list(5000)
+@api.get("/reports/orders/{fmt}")
+async def report_orders(fmt: str, month: Optional[str] = Query(default=None, regex=r"^\d{4}-(0[1-9]|1[0-2])$"), user=Depends(get_current_user)):
+    query = {"delivery_date": {"$regex": f"^{month}"}} if month else {}
+    items = await db.orders.find(query, {"_id": 0}).sort("delivery_date", -1).to_list(5000)
     headers = ["Entrega", "Cliente", "Telefone", "Aro", "Massa", "Status", "Total"]
     rows = [[o.get("delivery_date", ""), o.get("customer_name", ""), o.get("phone", ""),
              o.get("ring_size", ""), o.get("dough", ""), o.get("status", ""),
@@ -1286,7 +1338,7 @@ async def report_financial(fmt: str, user=Depends(get_current_user)):
         data = _build_pdf("Relatório de Encomendas", headers, rows)
         return StreamingResponse(io.BytesIO(data), media_type="application/pdf",
                                  headers={"Content-Disposition": "attachment; filename=encomendas.pdf"})
-    elif fmt == "xlsx":
+    if fmt == "xlsx":
         data = _build_xlsx("Encomendas", headers, rows)
         return StreamingResponse(io.BytesIO(data),
                                  media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

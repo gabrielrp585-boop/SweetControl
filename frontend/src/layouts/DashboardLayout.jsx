@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import { api } from "@/services/api";
+import { toast } from "sonner";
 
 const nav = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", id: "dashboard" },
@@ -28,6 +30,73 @@ export default function DashboardLayout({ children }) {
   const { theme, toggle } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user?.email) return undefined;
+
+    const storageKey = `sweetcontrol:support:last-check:${user.email}`;
+    let lastCheckedAt = 0;
+    try {
+      const savedCheck = Number(localStorage.getItem(storageKey));
+      if (Number.isFinite(savedCheck) && savedCheck > 0) lastCheckedAt = savedCheck;
+    } catch {
+      // Continue checking for replies when browser storage is unavailable.
+    }
+    let active = true;
+    let checking = false;
+
+    const checkSupport = async () => {
+      if (checking) return;
+      checking = true;
+      const checkStartedAt = Date.now();
+      try {
+        const { data } = await api.get("/support");
+        if (!active) return;
+
+        data.forEach((ticket) => {
+          (ticket.replies || []).forEach((reply) => {
+            const createdAt = Date.parse(reply.created_at);
+            if (
+              Number.isFinite(createdAt) &&
+              createdAt > lastCheckedAt &&
+              reply.author_email !== user.email
+            ) {
+              const message = reply.message || `Nova resposta em ${ticket.subject}`;
+              toast.info("Nova mensagem no suporte", {
+                description: message,
+                action: { label: "Ver", onClick: () => navigate("/suporte") },
+              });
+              if ("Notification" in window && Notification.permission === "granted") {
+                try {
+                  new Notification("Nova mensagem no suporte", { body: message });
+                } catch {
+                  // Browser notifications are optional; the in-app toast remains available.
+                }
+              }
+            }
+          });
+        });
+
+        lastCheckedAt = checkStartedAt;
+        try {
+          localStorage.setItem(storageKey, String(lastCheckedAt));
+        } catch {
+          // The in-memory checkpoint still avoids duplicates during this session.
+        }
+      } catch {
+        // Keep the previous checkpoint so the next poll retries missed replies.
+      } finally {
+        checking = false;
+      }
+    };
+
+    checkSupport();
+    const interval = window.setInterval(checkSupport, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [navigate, user?.email]);
 
   const handleLogout = async () => {
     await logout();

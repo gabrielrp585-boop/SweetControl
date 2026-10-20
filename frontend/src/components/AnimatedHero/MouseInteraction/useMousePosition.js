@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 /**
  * Custom hook to track mouse position with smooth lerp (linear interpolation)
  * and normalized coordinates (-1 to +1) for 3D parallax and cursor effects.
  */
 export function useMousePosition() {
+  const frameRef = useRef(null);
+  const pendingPositionRef = useRef(null);
   const [mouse, setMouse] = useState({
     x: 0,
     y: 0,
@@ -15,43 +17,30 @@ export function useMousePosition() {
   });
 
   useEffect(() => {
-    let animationFrameId;
-    let currentX = window.innerWidth / 2;
-    let currentY = window.innerHeight / 2;
-    let targetX = currentX;
-    let targetY = currentY;
-
     const handleMouseMove = (e) => {
-      targetX = e.clientX;
-      targetY = e.clientY;
-    };
+      pendingPositionRef.current = { x: e.clientX, y: e.clientY };
+      if (frameRef.current !== null) return;
 
-    const update = () => {
-      // Lerp smoothing (0.1 factor for elegant, fluid motion)
-      currentX += (targetX - currentX) * 0.1;
-      currentY += (targetY - currentY) * 0.1;
-
-      const normX = (currentX / window.innerWidth) * 2 - 1;
-      const normY = (currentY / window.innerHeight) * 2 - 1;
-
-      setMouse({
-        x: currentX,
-        y: currentY,
-        normalizedX: normX,
-        normalizedY: normY,
-        targetX,
-        targetY,
+      frameRef.current = requestAnimationFrame(() => {
+        frameRef.current = null;
+        const position = pendingPositionRef.current;
+        if (!position) return;
+        setMouse({
+          x: position.x,
+          y: position.y,
+          normalizedX: (position.x / window.innerWidth) * 2 - 1,
+          normalizedY: (position.y / window.innerHeight) * 2 - 1,
+          targetX: position.x,
+          targetY: position.y,
+        });
       });
-
-      animationFrameId = requestAnimationFrame(update);
     };
 
     window.addEventListener("mousemove", handleMouseMove);
-    animationFrameId = requestAnimationFrame(update);
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
-      cancelAnimationFrame(animationFrameId);
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     };
   }, []);
 

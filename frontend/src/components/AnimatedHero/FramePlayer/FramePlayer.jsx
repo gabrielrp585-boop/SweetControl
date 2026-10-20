@@ -28,37 +28,40 @@ export function FramePlayer() {
   useEffect(() => {
     let isCancelled = false;
     const loadedImages = new Array(TOTAL_FRAMES);
-    let count = 0;
+    let nextIndex = 0;
+    let loadedCount = 0;
+    let hasStarted = false;
+    imagesRef.current = loadedImages;
 
-    const preloadNext = (index) => {
-      if (isCancelled || index >= TOTAL_FRAMES) return;
-
-      const img = new Image();
-      img.src = getFrameUrl(index);
-      img.onload = () => {
-        if (isCancelled) return;
-        loadedImages[index] = img;
-        count++;
-        if (count === TOTAL_FRAMES) {
-          imagesRef.current = loadedImages;
-          setIsReady(true);
-        }
-      };
-      img.onerror = () => {
-        if (isCancelled) return;
-        loadedImages[index] = loadedImages[index - 1] || null;
-        count++;
-        if (count === TOTAL_FRAMES) {
-          imagesRef.current = loadedImages;
-          setIsReady(true);
-        }
-      };
+    const loadNext = async () => {
+      while (!isCancelled && nextIndex < TOTAL_FRAMES) {
+        const index = nextIndex++;
+        await new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            if (!isCancelled) {
+              loadedImages[index] = img;
+              if (!hasStarted) {
+                hasStarted = true;
+                frameIndexRef.current = index;
+                setIsReady(true);
+              }
+            }
+            loadedCount++;
+            resolve();
+          };
+          img.onerror = () => {
+            if (!isCancelled) loadedImages[index] = loadedImages[index - 1] || null;
+            loadedCount++;
+            if (!isCancelled && loadedCount === TOTAL_FRAMES) setIsReady(true);
+            resolve();
+          };
+          img.src = getFrameUrl(index);
+        });
+      }
     };
 
-    const BATCH_SIZE = 16;
-    for (let i = 0; i < TOTAL_FRAMES; i++) {
-      setTimeout(() => preloadNext(i), Math.floor(i / BATCH_SIZE) * 15);
-    }
+    Array.from({ length: 4 }, () => loadNext());
 
     return () => {
       isCancelled = true;
@@ -76,7 +79,7 @@ export function FramePlayer() {
     const img = imagesRef.current[idx];
     if (!img || !img.complete) return;
 
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const width = window.innerWidth;
     const height = window.innerHeight;
 
@@ -121,24 +124,22 @@ export function FramePlayer() {
       if (elapsed >= FRAME_INTERVAL) {
         lastFrameTimeRef.current = timestamp - (elapsed % FRAME_INTERVAL);
 
-        // Advance or reverse frame index smoothly
-        frameIndexRef.current += directionRef.current;
-
-        if (frameIndexRef.current >= TOTAL_FRAMES - 1) {
-          frameIndexRef.current = TOTAL_FRAMES - 1;
-          directionRef.current = -1; // Reverse direction
-        } else if (frameIndexRef.current <= 0) {
-          frameIndexRef.current = 0;
-          directionRef.current = 1; // Forward direction
+        const nextFrame = frameIndexRef.current + directionRef.current;
+        if (imagesRef.current[nextFrame]?.complete) {
+          frameIndexRef.current = nextFrame;
+          if (frameIndexRef.current >= TOTAL_FRAMES - 1) {
+            directionRef.current = -1;
+          } else if (frameIndexRef.current <= 0) {
+            directionRef.current = 1;
+          }
+          drawFrame(frameIndexRef.current);
         }
-
-        drawFrame(frameIndexRef.current);
       }
 
       rafIdRef.current = requestAnimationFrame(loop);
     };
 
-    drawFrame(0);
+    drawFrame(frameIndexRef.current);
     rafIdRef.current = requestAnimationFrame(loop);
 
     return () => {
