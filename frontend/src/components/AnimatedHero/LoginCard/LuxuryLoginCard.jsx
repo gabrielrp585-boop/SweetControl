@@ -39,16 +39,16 @@ export function LuxuryLoginCard() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 30, scale: 0.96, filter: "blur(10px)" }}
-      animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
-      transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
       className="w-full max-w-md relative z-20"
     >
       {/* Outer Glow Halo */}
       <div className="absolute -inset-1 rounded-[32px] bg-gradient-to-r from-rose-300/40 via-purple-300/30 to-amber-200/40 blur-xl opacity-70 group-hover:opacity-100 transition duration-1000" />
 
       {/* Main Glassmorphic Card Container */}
-      <div className="relative bg-white/75 backdrop-blur-2xl border border-white/80 rounded-[30px] p-8 sm:p-10 shadow-[0_20px_50px_rgba(74,45,53,0.12)] overflow-hidden">
+      <div className="relative bg-white/90 border border-white/80 rounded-[30px] p-8 sm:p-10 shadow-[0_20px_50px_rgba(74,45,53,0.12)] overflow-hidden">
         {/* Decorative Top Pill Tag */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-rose-100/70 border border-rose-200/60 text-rose-800 text-xs font-medium tracking-wider uppercase mb-6 shadow-sm">
           <Sparkles className="w-3.5 h-3.5 text-amber-500" /> SweetControl System

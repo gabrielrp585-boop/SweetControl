@@ -9,6 +9,7 @@ import { api, fmtDate } from "@/services/api";
 import {
   PageHeader, Card, Button, Input, Label, Select, Textarea, EmptyState, Modal, Badge,
 } from "@/components/ui-kit";
+import { useAuth } from "@/context/AuthContext";
 import HostingBilling from "@/components/HostingBilling";
 import { compressMany } from "@/lib/imageUtils";
 
@@ -33,6 +34,7 @@ const STATUSES = [
 ];
 
 export default function Support() {
+  const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -302,7 +304,7 @@ export default function Support() {
                     )}
                   </div>
 
-                  {detail.replies.map((r) => {
+                  {(detail.replies || []).map((r) => {
                     const isOwn = r.author_email === user?.email;
                     return (
                       <div
