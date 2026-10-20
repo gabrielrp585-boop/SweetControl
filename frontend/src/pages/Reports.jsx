@@ -43,9 +43,9 @@ export default function Reports() {
 
   useEffect(() => {
     api.get("/reports/months")
-      .then(({ data }) => setMonths(data.includes(month) ? data : [month, ...data]))
+      .then(({ data }) => setMonths(data))
       .catch(() => {});
-  }, [month]);
+  }, []);
 
   const download = async (key, fmt) => {
     try {

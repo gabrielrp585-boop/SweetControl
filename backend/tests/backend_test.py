@@ -444,7 +444,13 @@ class TestReports:
     def test_monthly_report_months_and_filtered_exports(self, auth_session):
         months = auth_session.get(f"{API}/reports/months")
         assert months.status_code == 200
-        assert all(len(month) == 7 and month[4] == "-" for month in months.json())
+        month_list = months.json()
+        assert all(len(month) == 7 and month[4] == "-" for month in month_list)
+        chronological = list(reversed(month_list))
+        for previous, current in zip(chronological, chronological[1:]):
+            previous_index = int(previous[:4]) * 12 + int(previous[5:])
+            current_index = int(current[:4]) * 12 + int(current[5:])
+            assert current_index - previous_index == 1
 
         for kind in ["sales", "expenses", "financial", "orders"]:
             response = auth_session.get(f"{API}/reports/{kind}/xlsx", params={"month": "2026-01"})

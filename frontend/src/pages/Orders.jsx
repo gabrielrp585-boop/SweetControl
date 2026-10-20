@@ -22,18 +22,29 @@ const EMPTY = {
 
 export default function Orders() {
   const [items, setItems] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
+  const [selectedCustomerId, setSelectedCustomerId] = useState("new");
   const [filterStatus, setFilterStatus] = useState("");
   const [q, setQ] = useState("");
 
   const load = async () => {
     setLoading(true);
-    const { data } = await api.get("/orders");
-    setItems(data);
-    setLoading(false);
+    try {
+      const [ordersResponse, customersResponse] = await Promise.all([
+        api.get("/orders"),
+        api.get("/customers"),
+      ]);
+      setItems(ordersResponse.data);
+      setCustomers(customersResponse.data);
+    } catch {
+      toast.error("Erro ao carregar encomendas e clientes");
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, []);
 
@@ -49,11 +60,14 @@ export default function Orders() {
 
   const openNew = () => {
     setEditing(null);
+    setSelectedCustomerId("new");
     setForm({ ...EMPTY, delivery_date: new Date().toISOString().slice(0, 10) });
     setOpen(true);
   };
   const openEdit = (o) => {
     setEditing(o);
+    const customer = customers.find((item) => item.name === o.customer_name);
+    setSelectedCustomerId(customer?.id || "new");
     setForm({ ...o, fillings: (o.fillings || []).join(", ") });
     setOpen(true);
   };
@@ -279,12 +293,42 @@ export default function Orders() {
         <form onSubmit={save} className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="order-form">
           <div className="sm:col-span-2">
             <Label>Cliente *</Label>
-            <Input
-              required
-              value={form.customer_name}
-              onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
-              data-testid="order-customer"
-            />
+            <Select
+              value={selectedCustomerId}
+              onChange={(event) => {
+                const customerId = event.target.value;
+                setSelectedCustomerId(customerId);
+                if (customerId === "new") {
+                  setForm((current) => ({ ...current, customer_name: "", phone: "", address: "" }));
+                  return;
+                }
+                const customer = customers.find((item) => item.id === customerId);
+                if (customer) {
+                  setForm((current) => ({
+                    ...current,
+                    customer_name: customer.name,
+                    phone: customer.phone || "",
+                    address: customer.address || "",
+                  }));
+                }
+              }}
+              data-testid="order-customer-select"
+            >
+              <option value="new">Novo cliente / informar nome</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>{customer.name}</option>
+              ))}
+            </Select>
+            {selectedCustomerId === "new" && (
+              <Input
+                required
+                value={form.customer_name}
+                onChange={(event) => setForm({ ...form, customer_name: event.target.value })}
+                placeholder="Nome do cliente"
+                className="mt-2"
+                data-testid="order-customer"
+              />
+            )}
           </div>
           <div>
             <Label>Telefone</Label>

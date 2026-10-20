@@ -1244,14 +1244,33 @@ def _build_xlsx(title: str, headers: List[str], rows: List[List]) -> bytes:
 
 @api.get("/reports/months")
 async def report_months(user=Depends(get_current_user)):
-    months = {_current_month()}
+    current_month = _current_month()
+    recorded_months = []
     sources = ((db.sales, "sale_date"), (db.expenses, "expense_date"), (db.orders, "delivery_date"))
     for collection, field in sources:
         async for item in collection.find({}, {"_id": 0, field: 1}):
             value = item.get(field, "")
-            if len(value) >= 7 and value[4:5] == "-":
-                months.add(value[:7])
-    return sorted(months, reverse=True)
+            if not isinstance(value, str):
+                continue
+            month = value[:7]
+            try:
+                datetime.strptime(month, "%Y-%m")
+            except (TypeError, ValueError):
+                continue
+            if month <= current_month:
+                recorded_months.append(month)
+
+    first_month = min(recorded_months) if recorded_months else current_month
+    year, month_number = (int(part) for part in first_month.split("-"))
+    end_year, end_month = (int(part) for part in current_month.split("-"))
+    months = []
+    while (year, month_number) <= (end_year, end_month):
+        months.append(f"{year:04d}-{month_number:02d}")
+        month_number += 1
+        if month_number == 13:
+            year += 1
+            month_number = 1
+    return months[::-1]
 
 
 @api.get("/reports/sales/{fmt}")
