@@ -16,12 +16,12 @@ const RINGS = [10, 15, 20, 25, 30];
 
 const EMPTY_DOUGH = {
   name: "", category: "massa", ring_sizes: [], yield_servings: 1,
-  ingredients: [], notes: "",
+  ingredients: [], cost_items: [], notes: "",
 };
 
 const EMPTY_CAKE = {
   name: "", ring_size: 20, dough_id: "", filling_ids: [], coating_id: "",
-  extra_cost: 0, margin_percent: 100,
+  extra_cost: 0, cost_items: [], margin_percent: 100,
 };
 
 // ============================================================================
@@ -150,7 +150,7 @@ function RecipesView({ doughs, ingredients, reload }) {
     form.ingredients.reduce((acc, r) => {
       const ing = ingredients.find((x) => x.id === r.ingredient_id);
       return acc + (ing ? Number(ing.unit_price) * Number(r.qty || 0) : 0);
-    }, 0);
+    }, 0) + (form.cost_items || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
   const save = async (e) => {
     e.preventDefault();
@@ -159,6 +159,7 @@ function RecipesView({ doughs, ingredients, reload }) {
       ring_sizes: form.ring_sizes.map(Number),
       yield_servings: Number(form.yield_servings),
       ingredients: form.ingredients.map((r) => ({ ...r, qty: Number(r.qty) })),
+      cost_items: (form.cost_items || []).map((item) => ({ ...item, amount: Number(item.amount || 0) })),
     };
     try {
       if (editing) await api.put(`/doughs/${editing.id}`, body);
@@ -366,6 +367,64 @@ function RecipesView({ doughs, ingredients, reload }) {
             </div>
           </div>
 
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label className="mb-0">Gastos adicionais da receita</Label>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setForm((current) => ({
+                  ...current,
+                  cost_items: [...(current.cost_items || []), { description: "", amount: 0 }],
+                }))}
+              >
+                <Plus className="h-3.5 w-3.5" /> Adicionar gasto
+              </Button>
+            </div>
+            {(form.cost_items || []).map((item, idx) => (
+              <div key={idx} className="grid grid-cols-12 gap-2 mb-2">
+                <Input
+                  className="col-span-7"
+                  value={item.description}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    cost_items: current.cost_items.map((row, index) => index === idx
+                      ? { ...row, description: event.target.value } : row),
+                  }))}
+                  placeholder="Ex.: gás, mão de obra"
+                  aria-label={`Descrição do gasto ${idx + 1}`}
+                  required
+                />
+                <Input
+                  className="col-span-4"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={item.amount}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    cost_items: current.cost_items.map((row, index) => index === idx
+                      ? { ...row, amount: event.target.value } : row),
+                  }))}
+                  placeholder="R$"
+                  aria-label={`Valor do gasto ${idx + 1}`}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setForm((current) => ({
+                    ...current,
+                    cost_items: current.cost_items.filter((_, index) => index !== idx),
+                  }))}
+                  className="col-span-1 p-2 rounded-xl hover:bg-destructive/10 hover:text-destructive"
+                  aria-label={`Remover gasto ${idx + 1}`}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+
           <div className="bg-muted/40 rounded-2xl p-4 flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Custo estimado</span>
             <span className="heading-serif text-2xl text-gold">{brl(computeCost())}</span>
@@ -408,6 +467,7 @@ function CakeBuilderView({ doughs, cakes, reload }) {
       ...form,
       ring_size: Number(form.ring_size),
       extra_cost: Number(form.extra_cost || 0),
+      cost_items: (form.cost_items || []).map((item) => ({ ...item, amount: Number(item.amount || 0) })),
       margin_percent: Number(form.margin_percent || 0),
       coating_id: form.coating_id || null,
     };
@@ -447,6 +507,7 @@ function CakeBuilderView({ doughs, cakes, reload }) {
       ...form,
       ring_size: Number(form.ring_size),
       extra_cost: Number(form.extra_cost || 0),
+      cost_items: (form.cost_items || []).map((item) => ({ ...item, amount: Number(item.amount || 0) })),
       margin_percent: Number(form.margin_percent || 0),
       coating_id: form.coating_id || null,
     };
@@ -470,6 +531,7 @@ function CakeBuilderView({ doughs, cakes, reload }) {
       filling_ids: c.filling_ids,
       coating_id: c.coating_id || "",
       extra_cost: c.extra_cost,
+      cost_items: c.cost_items || [],
       margin_percent: c.margin_percent,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -633,6 +695,64 @@ function CakeBuilderView({ doughs, cakes, reload }) {
                 <Input type="number" step="1" value={form.margin_percent}
                   onChange={(e) => setForm({ ...form, margin_percent: e.target.value })} />
               </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="mb-0">Gastos do bolo</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setForm((current) => ({
+                    ...current,
+                    cost_items: [...(current.cost_items || []), { description: "", amount: 0 }],
+                  }))}
+                >
+                  <Plus className="h-3.5 w-3.5" /> Adicionar gasto
+                </Button>
+              </div>
+              {(form.cost_items || []).map((item, idx) => (
+                <div key={idx} className="grid grid-cols-12 gap-2 mb-2">
+                  <Input
+                    className="col-span-7"
+                    value={item.description}
+                    onChange={(event) => setForm((current) => ({
+                      ...current,
+                      cost_items: current.cost_items.map((row, index) => index === idx
+                        ? { ...row, description: event.target.value } : row),
+                    }))}
+                    placeholder="Ex.: decoração, embalagem, gás"
+                    aria-label={`Descrição do gasto do bolo ${idx + 1}`}
+                    required
+                  />
+                  <Input
+                    className="col-span-4"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={item.amount}
+                    onChange={(event) => setForm((current) => ({
+                      ...current,
+                      cost_items: current.cost_items.map((row, index) => index === idx
+                        ? { ...row, amount: event.target.value } : row),
+                    }))}
+                    placeholder="R$"
+                    aria-label={`Valor do gasto do bolo ${idx + 1}`}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setForm((current) => ({
+                      ...current,
+                      cost_items: current.cost_items.filter((_, index) => index !== idx),
+                    }))}
+                    className="col-span-1 p-2 rounded-xl hover:bg-destructive/10 hover:text-destructive"
+                    aria-label={`Remover gasto do bolo ${idx + 1}`}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         </Card>

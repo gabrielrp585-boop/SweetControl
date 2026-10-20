@@ -179,12 +179,18 @@ class RecipeIngredient(BaseModel):
     unit: str = "g"
 
 
+class CostItem(BaseModel):
+    description: str
+    amount: float = Field(ge=0)
+
+
 class DoughIn(BaseModel):
     name: str
     category: Literal["massa", "recheio", "cobertura"] = "massa"
     ring_sizes: List[int] = []  # multiple rings supported
     yield_servings: float = 1.0
     ingredients: List[RecipeIngredient] = []
+    cost_items: List[CostItem] = []
     notes: str = ""
 
 
@@ -202,6 +208,7 @@ class CakeIn(BaseModel):
     filling_ids: List[str] = []
     coating_id: Optional[str] = None
     extra_cost: float = 0.0  # decoração, embalagem, etc
+    cost_items: List[CostItem] = []
     margin_percent: float = 100.0
 
 
@@ -233,6 +240,7 @@ class PriceRow(PriceRowIn):
 # ---- Orders (encomendas) ----
 class OrderIn(BaseModel):
     customer_name: str
+    cake_id: Optional[str] = None
     phone: str = ""
     address: str = ""
     delivery_date: str  # ISO date
@@ -240,6 +248,7 @@ class OrderIn(BaseModel):
     dough: str = ""
     fillings: List[str] = []
     observations: str = ""
+    cost_items: List[CostItem] = []
     total: float = 0.0
     status: Literal["pendente", "em_preparo", "finalizado", "entregue"] = "pendente"
 
@@ -247,6 +256,7 @@ class OrderIn(BaseModel):
 class Order(OrderIn):
     id: str
     created_at: str
+    cost_total: float = 0.0
 
 
 # ---- Sales (vendas) ----
@@ -493,8 +503,8 @@ async def list_movements(user=Depends(get_current_user)):
 # ============================================================================
 # DOUGHS (MASSAS / RECHEIOS)
 # ============================================================================
-async def compute_dough_cost(ingredients: List[dict]) -> float:
-    total = 0.0
+async def compute_dough_cost(ingredients: List[dict], cost_items: List[dict] = None) -> float:
+    total = sum(float(item.get("amount", 0) or 0) for item in (cost_items or []))
     for ri in ingredients:
         ing = await db.ingredients.find_one({"id": ri["ingredient_id"]}, {"_id": 0})
         if ing:
@@ -510,7 +520,7 @@ async def list_doughs(user=Depends(get_current_user)):
 @api.post("/doughs", response_model=Dough)
 async def create_dough(payload: DoughIn, user=Depends(get_current_user)):
     data = payload.model_dump()
-    data["total_cost"] = await compute_dough_cost(data["ingredients"])
+    data["total_cost"] = await compute_dough_cost(data["ingredients"], data["cost_items"])
     doc = {**data, "id": new_id(), "created_at": now_iso()}
     await db.doughs.insert_one(doc.copy())
     doc.pop("_id", None)
@@ -520,7 +530,7 @@ async def create_dough(payload: DoughIn, user=Depends(get_current_user)):
 @api.put("/doughs/{did}", response_model=Dough)
 async def update_dough(did: str, payload: DoughIn, user=Depends(get_current_user)):
     data = payload.model_dump()
-    data["total_cost"] = await compute_dough_cost(data["ingredients"])
+    data["total_cost"] = await compute_dough_cost(data["ingredients"], data["cost_items"])
     await db.doughs.update_one({"id": did}, {"$set": data})
     doc = await db.doughs.find_one({"id": did}, {"_id": 0})
     if not doc:
@@ -543,6 +553,7 @@ async def _compute_cake(payload: CakeIn) -> dict:
     filling_names = []
     coating_name = ""
     total = float(payload.extra_cost or 0)
+    total += sum(float(item.amount or 0) for item in payload.cost_items)
 
     if payload.dough_id:
         d = await db.doughs.find_one({"id": payload.dough_id}, {"_id": 0})
@@ -660,9 +671,12 @@ async def delete_price(pid: str, user=Depends(get_current_user)):
 # ============================================================================
 # ORDERS
 # ============================================================================
-async def compute_order_cost_and_deduct_stock(order_doc: dict):
+async def compute_order_cost_and_deduct_stock(order_doc: dict, deduct_stock: bool = True):
     """Calcula o custo total de produção de uma encomenda e subtrai os ingredientes do estoque."""
-    total_cost = 0.0
+    total_cost = sum(
+        float(item.get("amount", 0) or 0)
+        for item in order_doc.get("cost_items", []) or []
+    )
     stock_deductions = []
 
     # 1. Bolo (cake_id)
@@ -686,9 +700,10 @@ async def compute_order_cost_and_deduct_stock(order_doc: dict):
 
     # 2. Massas / Recheios diretos
     direct_dough_ids = []
-    if order_doc.get("dough_id"): direct_dough_ids.append(order_doc["dough_id"])
-    if order_doc.get("filling_ids"): direct_dough_ids.extend(order_doc["filling_ids"])
-    if order_doc.get("coating_id"): direct_dough_ids.append(order_doc["coating_id"])
+    if not cake_id:
+        if order_doc.get("dough_id"): direct_dough_ids.append(order_doc["dough_id"])
+        if order_doc.get("filling_ids"): direct_dough_ids.extend(order_doc["filling_ids"])
+        if order_doc.get("coating_id"): direct_dough_ids.append(order_doc["coating_id"])
 
     for did in direct_dough_ids:
         d = await db.doughs.find_one({"id": did}, {"_id": 0})
@@ -699,6 +714,9 @@ async def compute_order_cost_and_deduct_stock(order_doc: dict):
                     "ingredient_id": item.get("ingredient_id"),
                     "qty": float(item.get("qty", 0) or 0),
                 })
+
+    if not deduct_stock:
+        return round(total_cost, 2), stock_deductions
 
     # 3. Dar baixa nos ingredientes do estoque
     customer_name = order_doc.get("customer_name", "") or ""
@@ -734,7 +752,7 @@ async def _maybe_create_sale_from_finished_order(order_doc: dict):
 
     total = round(unit_price * 1, 2)
     if existing_sale:
-        cost = float(existing_sale.get("cost", 0) or 0)
+        cost, _ = await compute_order_cost_and_deduct_stock(order_doc, deduct_stock=False)
         await db.sales.update_one(
             {"id": existing_sale["id"]},
             {"$set": {
@@ -743,8 +761,9 @@ async def _maybe_create_sale_from_finished_order(order_doc: dict):
                 "unit_price": unit_price,
                 "customer_name": customer_name,
                 "sale_date": sale_date,
+                "cost": cost,
                 "total": total,
-                "profit": round(total - cost, 2),
+                "profit": round(total - (cost * int(existing_sale.get("qty", 1) or 1)), 2),
             }},
         )
         return await db.sales.find_one({"id": existing_sale["id"]}, {"_id": 0})
@@ -784,6 +803,7 @@ async def list_orders(status: Optional[str] = None, q: Optional[str] = None,
 @api.post("/orders", response_model=Order)
 async def create_order(payload: OrderIn, user=Depends(get_current_user)):
     doc = {**payload.model_dump(), "id": new_id(), "created_at": now_iso()}
+    doc["cost_total"], _ = await compute_order_cost_and_deduct_stock(doc, deduct_stock=False)
     await db.orders.insert_one(doc.copy())
     doc.pop("_id", None)
     # auto-create customer if doesn't exist
@@ -823,6 +843,8 @@ async def update_order(oid: str, payload: OrderIn, user=Depends(get_current_user
                 "total_spent": 0.0, "order_count": 0,
             })
 
+    doc["cost_total"], _ = await compute_order_cost_and_deduct_stock(doc, deduct_stock=False)
+    await db.orders.update_one({"id": oid}, {"$set": {"cost_total": doc["cost_total"]}})
     await _maybe_create_sale_from_finished_order(doc)
     return doc
 

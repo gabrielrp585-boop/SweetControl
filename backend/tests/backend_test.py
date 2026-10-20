@@ -203,20 +203,52 @@ class TestDoughs:
                 {"ingredient_id": ing1["id"], "ingredient_name": ing1["name"], "qty": 200, "unit": "g"},
                 {"ingredient_id": ing2["id"], "ingredient_name": ing2["name"], "qty": 100, "unit": "g"},
             ],
+            "cost_items": [{"description": "Gás", "amount": 1.5}],
             "notes": "",
         }
         r = auth_session.post(f"{API}/doughs", json=payload)
         assert r.status_code == 200, r.text
         d = r.json(); _no_underscore_id(d)
-        assert d["total_cost"] == 4.0, f"expected 4.0 got {d['total_cost']}"
+        assert d["total_cost"] == 5.5, f"expected 5.5 got {d['total_cost']}"
         did = d["id"]
 
         # update
         payload["ingredients"][0]["qty"] = 100
-        # cost: 100*0.01 + 100*0.02 = 3.0
+        # Ingredients cost 3.0 plus the 1.5 gas item.
         r = auth_session.put(f"{API}/doughs/{did}", json=payload)
         assert r.status_code == 200
-        assert r.json()["total_cost"] == 3.0
+        assert r.json()["total_cost"] == 4.5
+
+        cake_payload = {
+            "name": "TEST_Cake_Cost", "ring_size": 20, "dough_id": did,
+            "filling_ids": [], "coating_id": None, "extra_cost": 0,
+            "cost_items": [{"description": "Embalagem", "amount": 2.5}],
+            "margin_percent": 50,
+        }
+        cake_response = auth_session.post(f"{API}/cakes", json=cake_payload)
+        assert cake_response.status_code == 200, cake_response.text
+        cake = cake_response.json()
+        assert cake["total_cost"] == 7.0
+
+        order_response = auth_session.post(f"{API}/orders", json={
+            "customer_name": "TEST_Order_Cost", "delivery_date": "2026-04-15",
+            "cake_id": cake["id"], "total": 20, "status": "finalizado",
+            "cost_items": [{"description": "Entrega", "amount": 5}],
+        })
+        assert order_response.status_code == 200, order_response.text
+        order = order_response.json()
+        assert order["cost_total"] == 12.0
+        linked_sale = next(s for s in auth_session.get(f"{API}/sales").json()
+                           if s.get("order_id") == order["id"])
+        assert linked_sale["cost"] == 12.0
+        assert linked_sale["profit"] == 8.0
+
+        auth_session.delete(f"{API}/orders/{order['id']}")
+        auth_session.delete(f"{API}/sales/{linked_sale['id']}")
+        auth_session.delete(f"{API}/cakes/{cake['id']}")
+        for customer in auth_session.get(f"{API}/customers").json():
+            if customer["name"] == "TEST_Order_Cost":
+                auth_session.delete(f"{API}/customers/{customer['id']}")
 
         # delete
         auth_session.delete(f"{API}/doughs/{did}")
