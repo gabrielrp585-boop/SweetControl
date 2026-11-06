@@ -29,7 +29,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 
-from sales_logic import calculate_recipe_cost_and_usage
+from sales_logic import calculate_recipe_cost_and_usage, aggregate_ingredient_usage
 
 # ============================================================================
 # CONFIG
@@ -720,24 +720,26 @@ async def compute_order_cost_and_deduct_stock(order_doc: dict, deduct_stock: boo
 
     # 3. Dar baixa nos ingredientes do estoque
     customer_name = order_doc.get("customer_name", "") or ""
-    for item in stock_deductions:
+    for item in aggregate_ingredient_usage(stock_deductions):
         ing_id = item.get("ingredient_id")
         qty = float(item.get("qty", 0) or 0)
         if ing_id and qty > 0:
             ing = await db.ingredients.find_one({"id": ing_id}, {"_id": 0})
             if ing:
-                new_qty = float(ing.get("stock_qty", 0) or 0) - qty
+                available = float(ing.get("stock_qty", 0) or 0)
+                allowed_qty = min(qty, max(available, 0.0))
+                new_qty = available - allowed_qty
                 await db.ingredients.update_one({"id": ing_id}, {"$set": {"stock_qty": round(new_qty, 4)}})
                 await db.stock_movements.insert_one({
                     "id": new_id(),
                     "ingredient_id": ing_id,
                     "ingredient_name": ing.get("name", ""),
-                    "delta": -qty,
+                    "delta": -allowed_qty,
                     "reason": f"Encomenda Finalizada: {customer_name}".strip(),
                     "created_at": now_iso(),
                 })
 
-    return round(total_cost, 2), stock_deductions
+    return round(total_cost, 2), aggregate_ingredient_usage(stock_deductions)
 
 
 async def _maybe_create_sale_from_finished_order(order_doc: dict):
@@ -886,17 +888,30 @@ async def create_sale(payload: SaleIn, user=Depends(get_current_user)):
             ingredient_docs,
             servings=float(data.get("serving_count") or 1.0),
         )
-        stock_usage = [
+        stock_usage = aggregate_ingredient_usage([
             {
                 "ingredient_id": item.get("ingredient_id"),
                 "ingredient_name": item.get("ingredient_name", ""),
                 "qty": round(float(item.get("qty", 0) or 0) * qty, 4),
             }
             for item in usage
-        ]
+        ])
+
+    if not stock_usage and data.get("stock_consumed"):
+        stock_usage = aggregate_ingredient_usage([
+            {
+                "ingredient_id": item.get("ingredient_id"),
+                "ingredient_name": item.get("ingredient_name", ""),
+                "qty": round(float(item.get("qty", 0) or 0) * qty, 4),
+            }
+            for item in (data.get("stock_consumed") or [])
+        ])
 
     if calculated_cost:
         data["cost"] = round(calculated_cost, 2)
+
+    if stock_usage:
+        data["stock_consumed"] = stock_usage
 
     profit = round(total - (float(data.get("cost") or 0.0) * qty), 2)
     doc = {**data, "id": new_id(), "total": total, "profit": profit, "created_at": now_iso()}
@@ -910,20 +925,22 @@ async def create_sale(payload: SaleIn, user=Depends(get_current_user)):
         })
 
     if stock_usage:
-        for item in stock_usage:
+        for item in aggregate_ingredient_usage(stock_usage):
             ingredient_id = item.get("ingredient_id")
             if not ingredient_id:
                 continue
             ing = await db.ingredients.find_one({"id": ingredient_id}, {"_id": 0})
             if not ing:
                 continue
-            new_qty = float(ing.get("stock_qty", 0)) - float(item.get("qty", 0))
+            available = float(ing.get("stock_qty", 0) or 0)
+            qty_to_deduct = min(float(item.get("qty", 0) or 0), max(available, 0.0))
+            new_qty = available - qty_to_deduct
             await db.ingredients.update_one({"id": ingredient_id}, {"$set": {"stock_qty": round(new_qty, 4)}})
             await db.stock_movements.insert_one({
                 "id": new_id(),
                 "ingredient_id": ingredient_id,
                 "ingredient_name": ing.get("name", ""),
-                "delta": -float(item.get("qty", 0)),
+                "delta": -qty_to_deduct,
                 "reason": f"Venda: {data.get('description', '')}",
                 "created_at": now_iso(),
             })

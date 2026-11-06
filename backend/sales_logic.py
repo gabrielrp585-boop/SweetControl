@@ -1,6 +1,40 @@
 from typing import List, Dict, Tuple
 
 
+def aggregate_ingredient_usage(items: List[dict]) -> List[Dict[str, float]]:
+    """Agrupa uso de ingredientes para evitar contagem duplicada de itens iguais."""
+    merged: Dict[str, Dict[str, float | str]] = {}
+    for item in items or []:
+        ingredient_id = item.get("ingredient_id")
+        if not ingredient_id:
+            continue
+
+        qty = float(item.get("qty", 0) or 0)
+        if qty <= 0:
+            continue
+
+        if ingredient_id not in merged:
+            merged[ingredient_id] = {
+                "ingredient_id": ingredient_id,
+                "ingredient_name": item.get("ingredient_name", ""),
+                "qty": 0.0,
+            }
+
+        merged[ingredient_id]["qty"] = float(merged[ingredient_id]["qty"]) + qty
+        name = item.get("ingredient_name")
+        if name:
+            merged[ingredient_id]["ingredient_name"] = name
+
+    return [
+        {
+            "ingredient_id": entry["ingredient_id"],
+            "ingredient_name": entry["ingredient_name"],
+            "qty": round(float(entry["qty"]), 4),
+        }
+        for entry in merged.values()
+    ]
+
+
 def calculate_recipe_cost_and_usage(
     recipes: List[dict],
     ingredients: List[dict],
@@ -37,4 +71,4 @@ def calculate_recipe_cost_and_usage(
                 "qty": round(qty, 4),
             })
 
-    return round(total_cost, 2), usage
+    return round(total_cost, 2), aggregate_ingredient_usage(usage)

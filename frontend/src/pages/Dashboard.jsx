@@ -117,6 +117,13 @@ export default function Dashboard() {
         />
       </div>
 
+      <motion.div
+        {...fadeUp}
+        className="border border-border/70 bg-card/80 rounded-2xl px-4 py-3 text-xs text-muted-foreground"
+      >
+        Cálculo consolidado: ingredientes repetidos no mesmo pedido são somados uma única vez para manter custo, lucro e estoque reais.
+      </motion.div>
+
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <motion.div {...fadeUp} className="lg:col-span-2 bg-card border border-border/70 rounded-2xl p-6">

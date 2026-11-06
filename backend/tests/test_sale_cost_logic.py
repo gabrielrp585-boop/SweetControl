@@ -3,7 +3,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sales_logic import calculate_recipe_cost_and_usage
+from sales_logic import calculate_recipe_cost_and_usage, aggregate_ingredient_usage
+
+
+def test_aggregate_ingredient_usage_merges_duplicate_items():
+    usage = [
+        {"ingredient_id": "egg", "ingredient_name": "Ovos", "qty": 5},
+        {"ingredient_id": "egg", "ingredient_name": "Ovos", "qty": 5},
+        {"ingredient_id": "flour", "ingredient_name": "Farinha", "qty": 200},
+    ]
+
+    assert aggregate_ingredient_usage(usage) == [
+        {"ingredient_id": "egg", "ingredient_name": "Ovos", "qty": 10.0},
+        {"ingredient_id": "flour", "ingredient_name": "Farinha", "qty": 200.0},
+    ]
 
 
 def test_calculate_recipe_cost_and_usage_per_serving():
