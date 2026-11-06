@@ -874,7 +874,7 @@ async def create_sale(payload: SaleIn, user=Depends(get_current_user)):
     calculated_cost = float(data.get("cost") or 0.0)
     stock_usage = []
 
-    if not calculated_cost and data.get("recipe_ids"):
+    if data.get("recipe_ids"):
         recipes = []
         for recipe_id in data.get("recipe_ids", []) or []:
             recipe = await db.doughs.find_one({"id": recipe_id}, {"_id": 0})
@@ -883,11 +883,13 @@ async def create_sale(payload: SaleIn, user=Depends(get_current_user)):
         ingredient_docs = []
         async for ingredient in db.ingredients.find({}, {"_id": 0}):
             ingredient_docs.append(ingredient)
-        calculated_cost, usage = calculate_recipe_cost_and_usage(
+        recipe_cost, usage = calculate_recipe_cost_and_usage(
             recipes,
             ingredient_docs,
             servings=float(data.get("serving_count") or 1.0),
         )
+        if not calculated_cost:
+            calculated_cost = recipe_cost
         stock_usage = aggregate_ingredient_usage([
             {
                 "ingredient_id": item.get("ingredient_id"),

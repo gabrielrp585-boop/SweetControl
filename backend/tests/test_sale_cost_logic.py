@@ -42,3 +42,20 @@ def test_calculate_recipe_cost_and_usage_per_serving():
         {"ingredient_id": "ing-1", "ingredient_name": "Farinha", "qty": 25.0},
         {"ingredient_id": "ing-2", "ingredient_name": "Açúcar", "qty": 12.5},
     ]
+
+
+def test_recipe_usage_is_still_calculated_when_cost_is_manual():
+    ingredients = [{"id": "egg", "name": "Ovos", "unit_price": 0.8}]
+    recipes = [{
+        "name": "Bolo",
+        "yield_servings": 1,
+        "ingredients": [{"ingredient_id": "egg", "ingredient_name": "Ovos", "qty": 10}],
+    }]
+
+    _, usage = calculate_recipe_cost_and_usage(recipes, ingredients, servings=2)
+    stock_usage = aggregate_ingredient_usage([
+        {"ingredient_id": item["ingredient_id"], "ingredient_name": item["ingredient_name"], "qty": item["qty"] * 2}
+        for item in usage
+    ])
+
+    assert stock_usage == [{"ingredient_id": "egg", "ingredient_name": "Ovos", "qty": 40.0}]
