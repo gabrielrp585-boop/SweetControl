@@ -113,8 +113,8 @@ export default function Orders() {
         await api.post("/orders", body);
         toast.success("Encomenda criada");
       }
+      await load();
       setOpen(false);
-      load();
     } catch (err) {
       const detail = err.response?.data?.detail || err.message;
       toast.error(`Erro ao salvar: ${formatApiError(detail)}`);

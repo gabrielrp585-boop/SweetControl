@@ -301,13 +301,34 @@ class TestOrders:
         r = auth_session.get(f"{API}/orders", params={"q": "TEST_Order"})
         assert any(x["id"] == oid for x in r.json())
 
-        # update status
-        r = auth_session.put(f"{API}/orders/{oid}", json={**payload, "status": "finalizado"})
+        # update costs and status, then verify the saved document round-trips
+        updated_payload = {
+            **payload,
+            "cost_items": [{"description": "Entrega", "amount": 12.5}],
+            "status": "finalizado",
+        }
+        r = auth_session.put(f"{API}/orders/{oid}", json=updated_payload)
         assert r.status_code == 200
         assert r.json()["status"] == "finalizado"
+        assert r.json()["cost_items"] == updated_payload["cost_items"]
+        assert r.json()["cost_total"] == 12.5
+
+        stored_order = next(
+            order for order in auth_session.get(f"{API}/orders").json()
+            if order["id"] == oid
+        )
+        assert stored_order["cost_items"] == updated_payload["cost_items"]
+        assert stored_order["cost_total"] == 12.5
 
         # delete
         auth_session.delete(f"{API}/orders/{oid}")
+        linked_sale = next(
+            (sale for sale in auth_session.get(f"{API}/sales").json()
+             if sale.get("order_id") == oid),
+            None,
+        )
+        if linked_sale:
+            auth_session.delete(f"{API}/sales/{linked_sale['id']}")
         # cleanup auto-created customer
         for c in auth_session.get(f"{API}/customers").json():
             if c["name"] == "TEST_Order_Client":
