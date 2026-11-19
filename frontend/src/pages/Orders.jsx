@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Search, Pencil, Trash2, ClipboardList, Calendar, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
-import { api, brl, fmtDate } from "@/services/api";
+import { api, brl, fmtDate, formatApiError } from "@/services/api";
 import {
   PageHeader, Card, Button, Input, Label, Select, Textarea, Badge, EmptyState, Modal,
 } from "@/components/ui-kit";
@@ -97,7 +97,10 @@ export default function Orders() {
       ring_size: Number(form.ring_size),
       total: Number(form.total),
       cake_id: form.cake_id || null,
-      cost_items: (form.cost_items || []).map((item) => ({ ...item, amount: Number(item.amount || 0) })),
+      cost_items: (form.cost_items || []).map((item) => ({
+        description: String(item.description || "").trim(),
+        amount: Number(item.amount || 0),
+      })),
       fillings: form.fillings
         ? form.fillings.split(",").map((s) => s.trim()).filter(Boolean)
         : [],
@@ -113,7 +116,8 @@ export default function Orders() {
       setOpen(false);
       load();
     } catch (err) {
-      toast.error("Erro ao salvar");
+      const detail = err.response?.data?.detail || err.message;
+      toast.error(`Erro ao salvar: ${formatApiError(detail)}`);
     }
   };
 

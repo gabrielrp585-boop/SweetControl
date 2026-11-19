@@ -95,7 +95,7 @@ export default function Dashboard() {
           icon={Package}
           label="Custo de Produção"
           value={brl(data.cogs_month || 0)}
-          sub="Ingredientes das vendas"
+          sub="Vendas realizadas e encomendas abertas"
           tint="bg-rose-200/40"
           testId="kpi-cogs"
         />

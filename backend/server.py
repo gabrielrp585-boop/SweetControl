@@ -1108,8 +1108,26 @@ async def dashboard(user=Depends(get_current_user)):
     total_day = sum(s.get("total", 0) for s in sales if s.get("sale_date", "").startswith(today))
     total_month = sum(s.get("total", 0) for s in sales if s.get("sale_date", "").startswith(month_prefix))
     
-    # Custo de Produção (CPV) e Lucro Bruto das Vendas
-    cogs_month = sum(float(s.get("cost", 0) or 0) * int(s.get("qty", 1) or 1) for s in sales if s.get("sale_date", "").startswith(month_prefix))
+    # Open orders contribute their saved estimate; completed orders are represented by sales.
+    open_order_costs = 0.0
+    for order in orders:
+        created_at = str(order.get("created_at") or "")
+        if order.get("status") not in ("pendente", "em_preparo") or not created_at.startswith(month_prefix):
+            continue
+        order_cost = float(order.get("cost_total", 0) or 0)
+        if order_cost <= 0 and (
+            order.get("cake_id") or order.get("cost_items") or order.get("dough") or order.get("fillings")
+        ):
+            order_cost, _ = await compute_order_cost_and_deduct_stock(order, deduct_stock=False)
+            if order_cost > 0:
+                await db.orders.update_one(
+                    {"id": order["id"]}, {"$set": {"cost_total": order_cost}}
+                )
+                order["cost_total"] = order_cost
+        open_order_costs += order_cost
+
+    # Production costs include sales and open orders created this month.
+    cogs_month = sum(float(s.get("cost", 0) or 0) * int(s.get("qty", 1) or 1) for s in sales if s.get("sale_date", "").startswith(month_prefix)) + open_order_costs
     sales_gross_profit = sum(float(s.get("profit", 0) or 0) for s in sales if s.get("sale_date", "").startswith(month_prefix))
     expenses_month = sum(float(e.get("amount", 0) or 0) for e in expenses if e.get("expense_date", "").startswith(month_prefix))
     
