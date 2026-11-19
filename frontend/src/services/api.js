@@ -32,7 +32,10 @@ export function brl(n) {
 export function fmtDate(iso) {
   if (!iso) return "—";
   try {
-    const d = new Date(iso);
+    const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    const d = dateOnly
+      ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+      : new Date(iso);
     return d.toLocaleDateString("pt-BR");
   } catch {
     return iso;

@@ -20,6 +20,13 @@ const EMPTY = {
   cost_items: [], total: 0, status: "pendente",
 };
 
+const localDateInputValue = () => {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+};
+
 export default function Orders() {
   const [items, setItems] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -64,7 +71,7 @@ export default function Orders() {
   const openNew = () => {
     setEditing(null);
     setSelectedCustomerId("new");
-    setForm({ ...EMPTY, delivery_date: new Date().toISOString().slice(0, 10) });
+    setForm({ ...EMPTY, delivery_date: localDateInputValue() });
     setOpen(true);
   };
   const openEdit = (o) => {
@@ -128,9 +135,7 @@ export default function Orders() {
     }
     // Adiciona código do Brasil se ausente
     const phone = phoneRaw.startsWith("55") ? phoneRaw : `55${phoneRaw}`;
-    const date = o.delivery_date
-      ? new Date(o.delivery_date).toLocaleDateString("pt-BR")
-      : "—";
+    const date = fmtDate(o.delivery_date);
     const fillings = o.fillings?.length ? o.fillings.join(", ") : "—";
     const total = new Intl.NumberFormat("pt-BR", {
       style: "currency", currency: "BRL",

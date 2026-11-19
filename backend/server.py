@@ -799,7 +799,13 @@ async def list_orders(status: Optional[str] = None, q: Optional[str] = None,
         query["status"] = status
     if q:
         query["customer_name"] = {"$regex": q, "$options": "i"}
-    return await db.orders.find(query, {"_id": 0}).sort("delivery_date", 1).to_list(2000)
+    orders = await db.orders.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    for order in orders:
+        if not float(order.get("cost_total", 0) or 0) and (order.get("cake_id") or order.get("cost_items")):
+            order["cost_total"], _ = await compute_order_cost_and_deduct_stock(
+                order, deduct_stock=False
+            )
+    return orders
 
 
 @api.post("/orders", response_model=Order)
