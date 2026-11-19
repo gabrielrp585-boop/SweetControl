@@ -32,6 +32,7 @@ from openpyxl.styles import Font, Alignment, PatternFill
 from sales_logic import (
     aggregate_ingredient_usage,
     calculate_recipe_cost_and_usage,
+    linked_sale_cost_fields,
     match_saved_cake,
     match_recipes_by_name,
 )
@@ -843,6 +844,36 @@ async def _maybe_create_sale_from_finished_order(order_doc: dict):
     return doc
 
 
+async def _refresh_zero_cost_order_sales(sales: List[dict], orders: List[dict]):
+    """Recalcula custos de vendas antigas vinculadas a encomendas, sem mexer no estoque."""
+    orders_by_id = {order.get("id"): order for order in orders if order.get("id")}
+    for sale in sales:
+        order_id = sale.get("order_id")
+        order = orders_by_id.get(order_id)
+        if not order or float(sale.get("cost", 0) or 0) > 0:
+            continue
+
+        order_cost = float(order.get("cost_total", 0) or 0)
+        if order_cost <= 0:
+            order_cost, _ = await compute_order_cost_and_deduct_stock(
+                order, deduct_stock=False
+            )
+        if order_cost <= 0:
+            continue
+
+        sale_fields = linked_sale_cost_fields(order_cost, sale)
+
+        await db.orders.update_one(
+            {"id": order_id}, {"$set": {"cost_total": round(order_cost, 2)}}
+        )
+        await db.sales.update_one(
+            {"id": sale["id"]},
+            {"$set": sale_fields},
+        )
+        order["cost_total"] = round(order_cost, 2)
+        sale.update(sale_fields)
+
+
 @api.get("/orders", response_model=List[Order])
 async def list_orders(status: Optional[str] = None, q: Optional[str] = None,
                       user=Depends(get_current_user)):
@@ -876,6 +907,11 @@ async def list_orders(status: Optional[str] = None, q: Optional[str] = None,
                     {"id": order["id"]},
                     {"$set": {"cost_total": order["cost_total"]}},
                 )
+    order_ids = [order["id"] for order in orders]
+    linked_sales = await db.sales.find(
+        {"order_id": {"$in": order_ids}}, {"_id": 0}
+    ).to_list(5000) if order_ids else []
+    await _refresh_zero_cost_order_sales(linked_sales, orders)
     return orders
 
 
@@ -1067,6 +1103,7 @@ async def dashboard(user=Depends(get_current_user)):
     sales = await db.sales.find({}, {"_id": 0}).to_list(10000)
     expenses = await db.expenses.find({}, {"_id": 0}).to_list(10000)
     orders = await db.orders.find({}, {"_id": 0}).to_list(10000)
+    await _refresh_zero_cost_order_sales(sales, orders)
 
     total_day = sum(s.get("total", 0) for s in sales if s.get("sale_date", "").startswith(today))
     total_month = sum(s.get("total", 0) for s in sales if s.get("sale_date", "").startswith(month_prefix))

@@ -68,6 +68,19 @@ def match_saved_cake(order: dict, cakes: List[dict]) -> dict | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def linked_sale_cost_fields(order_cost: float, sale: dict) -> Dict[str, float]:
+    quantity = max(int(sale.get("qty", 1) or 1), 1)
+    unit_cost = round(float(order_cost) / quantity, 2)
+    total = float(sale.get("total", 0) or 0)
+    if not total:
+        total = float(sale.get("unit_price", 0) or 0) * quantity
+    return {
+        "cost": unit_cost,
+        "total": round(total, 2),
+        "profit": round(total - unit_cost * quantity, 2),
+    }
+
+
 def aggregate_ingredient_usage(items: List[dict]) -> List[Dict[str, float]]:
     """Agrupa uso de ingredientes para evitar contagem duplicada de itens iguais."""
     merged: Dict[str, Dict[str, float | str]] = {}

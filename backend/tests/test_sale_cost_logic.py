@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sales_logic import (
     aggregate_ingredient_usage,
     calculate_recipe_cost_and_usage,
+    linked_sale_cost_fields,
     match_saved_cake,
     match_recipes_by_name,
 )
@@ -87,6 +88,15 @@ def test_match_saved_cake_does_not_guess_between_duplicate_compositions():
         {"ring_size": 15, "dough": "Branca", "fillings": ["Cocada"]},
         [{**cake, "id": "first"}, {**cake, "id": "second"}],
     ) is None
+
+
+def test_linked_sale_uses_order_cost_to_recalculate_profit():
+    fields = linked_sale_cost_fields(
+        30,
+        {"qty": 2, "unit_price": 50, "total": 100, "cost": 0, "profit": 100},
+    )
+
+    assert fields == {"cost": 15.0, "total": 100.0, "profit": 70.0}
 
 
 def test_aggregate_ingredient_usage_merges_duplicate_items():
