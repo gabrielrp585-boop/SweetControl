@@ -44,6 +44,30 @@ def match_recipes_by_name(names: List[str], recipes: List[dict]) -> List[dict]:
     return matches
 
 
+def match_saved_cake(order: dict, cakes: List[dict]) -> dict | None:
+    fillings = order.get("fillings", []) or []
+    if isinstance(fillings, str):
+        fillings = [name.strip() for name in fillings.split(",") if name.strip()]
+    requested_fillings = sorted(_normalize_recipe_name(name) for name in fillings)
+    requested_dough = set(_normalize_recipe_name(order.get("dough", "")).split())
+
+    matches = []
+    for cake in cakes or []:
+        if int(cake.get("ring_size", 0) or 0) != int(order.get("ring_size", 0) or 0):
+            continue
+
+        cake_dough = set(_normalize_recipe_name(cake.get("dough_name", "")).split())
+        if requested_dough and not requested_dough.issubset(cake_dough):
+            continue
+
+        cake_fillings = cake.get("filling_names", []) or []
+        if sorted(_normalize_recipe_name(name) for name in cake_fillings) != requested_fillings:
+            continue
+        matches.append(cake)
+
+    return matches[0] if len(matches) == 1 else None
+
+
 def aggregate_ingredient_usage(items: List[dict]) -> List[Dict[str, float]]:
     """Agrupa uso de ingredientes para evitar contagem duplicada de itens iguais."""
     merged: Dict[str, Dict[str, float | str]] = {}

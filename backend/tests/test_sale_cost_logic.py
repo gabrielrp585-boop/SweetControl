@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sales_logic import (
     aggregate_ingredient_usage,
     calculate_recipe_cost_and_usage,
+    match_saved_cake,
     match_recipes_by_name,
 )
 
@@ -43,6 +44,49 @@ def test_match_recipes_by_name_skips_ambiguous_names():
     ]
 
     assert match_recipes_by_name(["Brigadeiro"], recipes) == []
+
+
+def test_match_saved_cake_uses_unique_saved_composition_when_order_has_no_cake_id():
+    cakes = [
+        {
+            "id": "saved-cake",
+            "ring_size": 15,
+            "dough_name": "Massa Branca",
+            "filling_names": ["Brigadeiro Branco", "Cocada"],
+            "total_cost": 25,
+        },
+        {
+            "id": "wrong-ring",
+            "ring_size": 20,
+            "dough_name": "Massa Branca",
+            "filling_names": ["Brigadeiro Branco", "Cocada"],
+            "total_cost": 30,
+        },
+    ]
+
+    match = match_saved_cake(
+        {
+            "ring_size": 15,
+            "dough": "Branca",
+            "fillings": ["Brig Branco", "Cocada"],
+        },
+        cakes,
+    )
+
+    assert match["id"] == "saved-cake"
+
+
+def test_match_saved_cake_does_not_guess_between_duplicate_compositions():
+    cake = {
+        "ring_size": 15,
+        "dough_name": "Massa Branca",
+        "filling_names": ["Cocada"],
+    }
+
+    assert match_saved_cake(
+        {"ring_size": 15, "dough": "Branca", "fillings": ["Cocada"]},
+        [{**cake, "id": "first"}, {**cake, "id": "second"}],
+    ) is None
 
 
 def test_aggregate_ingredient_usage_merges_duplicate_items():
