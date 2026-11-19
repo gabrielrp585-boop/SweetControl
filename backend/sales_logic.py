@@ -1,4 +1,47 @@
+import re
+import unicodedata
 from typing import List, Dict, Tuple
+
+
+def _normalize_recipe_name(name: str) -> str:
+    normalized = unicodedata.normalize("NFKD", name or "")
+    normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+    tokens = re.findall(r"[a-z0-9]+", normalized.casefold())
+    aliases = {"brig": "brigadeiro", "c": "com"}
+    normalized_tokens = []
+    for token in tokens:
+        if token == "4leites":
+            normalized_tokens.extend(["4", "leite"])
+            continue
+        if token.endswith("s") and len(token) > 4:
+            token = token[:-1]
+        normalized_tokens.append(aliases.get(token, token))
+    return " ".join(normalized_tokens)
+
+
+def match_recipes_by_name(names: List[str], recipes: List[dict]) -> List[dict]:
+    recipes_by_name: Dict[str, List[dict]] = {}
+    for recipe in recipes or []:
+        name = _normalize_recipe_name(recipe.get("name", ""))
+        if name:
+            recipes_by_name.setdefault(name, []).append(recipe)
+
+    matches = []
+    for name in names or []:
+        normalized_name = _normalize_recipe_name(name)
+        candidates = recipes_by_name.get(normalized_name, [])
+        if not candidates and normalized_name:
+            requested_tokens = set(normalized_name.split())
+            candidates = [
+                recipe
+                for recipe in recipes or []
+                if requested_tokens.issubset(
+                    set(_normalize_recipe_name(recipe.get("name", "")).split())
+                )
+            ]
+        if len(candidates) == 1:
+            matches.append(candidates[0])
+    return matches
 
 
 def aggregate_ingredient_usage(items: List[dict]) -> List[Dict[str, float]]:

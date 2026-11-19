@@ -3,7 +3,46 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sales_logic import calculate_recipe_cost_and_usage, aggregate_ingredient_usage
+from sales_logic import (
+    aggregate_ingredient_usage,
+    calculate_recipe_cost_and_usage,
+    match_recipes_by_name,
+)
+
+
+def test_match_recipes_by_name_handles_accents_abbreviations_and_repeated_fillings():
+    recipes = [
+        {"id": "massa", "name": "Massa Branca"},
+        {"id": "filling", "name": "Brigadeiro Tradicional"},
+        {"id": "fruit", "name": "Brigadeiro de Morangos"},
+        {"id": "passionfruit", "name": "Brigadeiro de Maracujá"},
+        {"id": "milk", "name": "4 Leites"},
+    ]
+
+    matches = match_recipes_by_name(
+        [
+            "Massa Branca",
+            "Brig. Tradicional",
+            "Brig. Tradicional",
+            "Brig. de Morango",
+            "Brig. de Maracuja",
+            "4leites",
+        ],
+        recipes,
+    )
+
+    assert [recipe["id"] for recipe in matches] == [
+        "massa", "filling", "filling", "fruit", "passionfruit", "milk",
+    ]
+
+
+def test_match_recipes_by_name_skips_ambiguous_names():
+    recipes = [
+        {"id": "one", "name": "Brigadeiro"},
+        {"id": "two", "name": "Brigadeiro"},
+    ]
+
+    assert match_recipes_by_name(["Brigadeiro"], recipes) == []
 
 
 def test_aggregate_ingredient_usage_merges_duplicate_items():

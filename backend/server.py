@@ -29,7 +29,11 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 
-from sales_logic import calculate_recipe_cost_and_usage, aggregate_ingredient_usage
+from sales_logic import (
+    aggregate_ingredient_usage,
+    calculate_recipe_cost_and_usage,
+    match_recipes_by_name,
+)
 
 # ============================================================================
 # CONFIG
@@ -671,6 +675,23 @@ async def delete_price(pid: str, user=Depends(get_current_user)):
 # ============================================================================
 # ORDERS
 # ============================================================================
+async def _dough_cost_and_usage(dough: dict):
+    cost = float(dough.get("total_cost", 0) or 0)
+    if cost <= 0:
+        cost = await compute_dough_cost(
+            dough.get("ingredients", []) or [],
+            dough.get("cost_items", []) or [],
+        )
+    usage = [
+        {
+            "ingredient_id": item.get("ingredient_id"),
+            "qty": float(item.get("qty", 0) or 0),
+        }
+        for item in dough.get("ingredients", []) or []
+    ]
+    return cost, usage
+
+
 async def compute_order_cost_and_deduct_stock(order_doc: dict, deduct_stock: bool = True):
     """Calcula o custo total de produção de uma encomenda e subtrai os ingredientes do estoque."""
     total_cost = sum(
@@ -684,19 +705,36 @@ async def compute_order_cost_and_deduct_stock(order_doc: dict, deduct_stock: boo
     if cake_id:
         cake = await db.cakes.find_one({"id": cake_id}, {"_id": 0})
         if cake:
-            total_cost += float(cake.get("total_cost", 0) or 0)
-            dough_ids = []
-            if cake.get("dough_id"): dough_ids.append(cake["dough_id"])
-            if cake.get("filling_ids"): dough_ids.extend(cake["filling_ids"])
-            if cake.get("coating_id"): dough_ids.append(cake["coating_id"])
-            for did in dough_ids:
-                d = await db.doughs.find_one({"id": did}, {"_id": 0})
-                if d:
-                    for item in d.get("ingredients", []):
-                        stock_deductions.append({
-                            "ingredient_id": item.get("ingredient_id"),
-                            "qty": float(item.get("qty", 0) or 0),
-                        })
+            cake_cost = float(cake.get("total_cost", 0) or 0)
+            component_doughs = []
+            if cake.get("dough_id"):
+                component_doughs.append(cake["dough_id"])
+            component_doughs.extend(cake.get("filling_ids", []) or [])
+            if cake.get("coating_id"):
+                component_doughs.append(cake["coating_id"])
+
+            if cake_cost > 0:
+                total_cost += cake_cost
+            else:
+                cake_cost += float(cake.get("extra_cost", 0) or 0)
+                cake_cost += sum(
+                    float(item.get("amount", 0) or 0)
+                    for item in cake.get("cost_items", []) or []
+                )
+                for did in component_doughs:
+                    dough = await db.doughs.find_one({"id": did}, {"_id": 0})
+                    if dough:
+                        dough_cost, usage = await _dough_cost_and_usage(dough)
+                        cake_cost += dough_cost
+                        stock_deductions.extend(usage)
+                total_cost += cake_cost
+
+            if cake_cost > 0 and float(cake.get("total_cost", 0) or 0) > 0:
+                for did in component_doughs:
+                    dough = await db.doughs.find_one({"id": did}, {"_id": 0})
+                    if dough:
+                        _, usage = await _dough_cost_and_usage(dough)
+                        stock_deductions.extend(usage)
 
     # 2. Massas / Recheios diretos
     direct_dough_ids = []
@@ -705,15 +743,23 @@ async def compute_order_cost_and_deduct_stock(order_doc: dict, deduct_stock: boo
         if order_doc.get("filling_ids"): direct_dough_ids.extend(order_doc["filling_ids"])
         if order_doc.get("coating_id"): direct_dough_ids.append(order_doc["coating_id"])
 
+        if not direct_dough_ids and (order_doc.get("dough") or order_doc.get("fillings")):
+            doughs = await db.doughs.find({}, {"_id": 0}).to_list(2000)
+            recipe_names = [order_doc.get("dough", "")]
+            fillings = order_doc.get("fillings", []) or []
+            if isinstance(fillings, str):
+                fillings = fillings.split(",")
+            recipe_names.extend(fillings)
+            direct_dough_ids.extend(
+                dough["id"] for dough in match_recipes_by_name(recipe_names, doughs)
+            )
+
     for did in direct_dough_ids:
         d = await db.doughs.find_one({"id": did}, {"_id": 0})
         if d:
-            total_cost += float(d.get("total_cost", 0) or 0)
-            for item in d.get("ingredients", []):
-                stock_deductions.append({
-                    "ingredient_id": item.get("ingredient_id"),
-                    "qty": float(item.get("qty", 0) or 0),
-                })
+            dough_cost, usage = await _dough_cost_and_usage(d)
+            total_cost += dough_cost
+            stock_deductions.extend(usage)
 
     if not deduct_stock:
         return round(total_cost, 2), stock_deductions
@@ -799,12 +845,21 @@ async def list_orders(status: Optional[str] = None, q: Optional[str] = None,
         query["status"] = status
     if q:
         query["customer_name"] = {"$regex": q, "$options": "i"}
-    orders = await db.orders.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    orders = await db.orders.find(query, {"_id": 0}).sort(
+        [("delivery_date", -1), ("created_at", -1)]
+    ).to_list(2000)
     for order in orders:
-        if not float(order.get("cost_total", 0) or 0) and (order.get("cake_id") or order.get("cost_items")):
+        if not float(order.get("cost_total", 0) or 0) and (
+            order.get("cake_id") or order.get("cost_items") or order.get("dough") or order.get("fillings")
+        ):
             order["cost_total"], _ = await compute_order_cost_and_deduct_stock(
                 order, deduct_stock=False
             )
+            if order["cost_total"] > 0:
+                await db.orders.update_one(
+                    {"id": order["id"]},
+                    {"$set": {"cost_total": order["cost_total"]}},
+                )
     return orders
 
 

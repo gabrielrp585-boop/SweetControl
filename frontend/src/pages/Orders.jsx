@@ -59,12 +59,20 @@ export default function Orders() {
   useEffect(() => { load(); }, []);
 
   const filtered = useMemo(
-    () =>
-      items.filter(
+    () => {
+      const deliveryTimestamp = (order) => {
+        const timestamp = new Date(`${String(order.delivery_date || "").slice(0, 10)}T00:00:00`).getTime();
+        return Number.isNaN(timestamp) ? 0 : timestamp;
+      };
+      return items.filter(
         (o) =>
           (!filterStatus || o.status === filterStatus) &&
           (!q || o.customer_name.toLowerCase().includes(q.toLowerCase()))
-      ),
+      ).sort((a, b) =>
+        deliveryTimestamp(b) - deliveryTimestamp(a) ||
+        String(b.created_at || "").localeCompare(String(a.created_at || ""))
+      );
+    },
     [items, filterStatus, q]
   );
 
