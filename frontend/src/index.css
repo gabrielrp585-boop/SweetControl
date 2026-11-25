@@ -17,7 +17,7 @@
     --secondary: 260 100% 92%;         /* #E6D7FF */
     --secondary-foreground: 256 33% 25%;
     --muted: 36 22% 93%;               /* #F3F0EC */
-    --muted-foreground: 24 4% 52%;     /* #8A8581 */
+    --muted-foreground: 24 14% 26%;    /* high contrast readable secondary text */
     --accent: 45 70% 84%;              /* #F5E6BA */
     --accent-foreground: 42 47% 22%;   /* #50411F */
     --destructive: 0 70% 60%;
@@ -32,38 +32,38 @@
     --chart-5: 0 100% 90%;
     --radius: 1rem;
 
-    --gold: 36 47% 60%;
-    --rose-deep: 340 35% 55%;
+    --gold: 38 75% 44%;
+    --rose-deep: 340 60% 45%;
   }
 
   .dark {
     --background: 290 11% 10%;         /* #1A161C */
-    --foreground: 320 18% 97%;         /* #F9F6F7 */
+    --foreground: 0 0% 100%;           /* pure crisp white #FFFFFF */
     --card: 295 14% 14%;               /* #251E27 */
-    --card-foreground: 320 18% 97%;
+    --card-foreground: 0 0% 100%;
     --popover: 295 14% 14%;
-    --popover-foreground: 320 18% 97%;
-    --primary: 340 78% 76%;            /* #F48FB1 */
-    --primary-foreground: 330 35% 13%; /* #2D1621 */
-    --secondary: 262 35% 73%;          /* #B39DDB */
-    --secondary-foreground: 320 18% 97%;
-    --muted: 290 12% 20%;              /* #352B38 */
-    --muted-foreground: 290 4% 67%;    /* #AFA9AD */
-    --accent: 49 73% 81%;              /* #F3E5AB */
-    --accent-foreground: 50 18% 15%;
-    --destructive: 0 65% 67%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 340 88% 78%;            /* vibrant rose */
+    --primary-foreground: 330 45% 11%; /* #290F1B */
+    --secondary: 262 55% 80%;          /* bright lilac */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 290 14% 22%;              /* #3B2F3F */
+    --muted-foreground: 320 25% 90%;   /* crisp bright secondary text (#EDE0E8) */
+    --accent: 48 90% 82%;              /* luminous gold */
+    --accent-foreground: 50 25% 12%;
+    --destructive: 0 75% 68%;
     --destructive-foreground: 0 0% 100%;
-    --border: 290 10% 22%;             /* #3D3240 */
-    --input: 290 10% 22%;
-    --ring: 340 78% 70%;
-    --chart-1: 340 78% 76%;
-    --chart-2: 262 35% 73%;
-    --chart-3: 49 73% 81%;
-    --chart-4: 186 53% 80%;
-    --chart-5: 0 60% 75%;
+    --border: 290 15% 32%;
+    --input: 290 15% 32%;
+    --ring: 340 85% 75%;
+    --chart-1: 340 88% 78%;
+    --chart-2: 262 55% 80%;
+    --chart-3: 48 90% 82%;
+    --chart-4: 186 70% 82%;
+    --chart-5: 0 75% 78%;
 
-    --gold: 42 60% 70%;
-    --rose-deep: 340 60% 70%;
+    --gold: 44 92% 74%;
+    --rose-deep: 340 85% 78%;
   }
 }
 
@@ -74,11 +74,19 @@
     @apply bg-background text-foreground antialiased;
     font-family: 'Outfit', system-ui, -apple-system, sans-serif;
     font-feature-settings: 'cv11', 'ss01';
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
   }
-  h1, h2, h3, h4 {
+  .dark body {
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  }
+  h1, h2, h3, h4, .heading-serif {
     font-family: 'Cormorant Garamond', Georgia, serif;
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: -0.01em;
+  }
+  .dark h1, .dark h2, .dark h3, .dark h4, .dark .heading-serif {
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
   }
 
   /* Soft scrollbar */
@@ -96,30 +104,88 @@
   }
 }
 
-/* Decorative aurora background */
+/* Decorative aurora background (completely transparent so the video shines through like Login) */
 .aurora-bg {
-  background:
-    radial-gradient(ellipse 80% 50% at 10% 0%,  hsl(var(--primary) / 0.25), transparent 60%),
-    radial-gradient(ellipse 60% 50% at 90% 10%, hsl(var(--secondary) / 0.30), transparent 60%),
-    radial-gradient(ellipse 70% 60% at 50% 100%, hsl(var(--accent) / 0.25), transparent 60%),
-    hsl(var(--background));
+  background: transparent !important;
 }
 .dark .aurora-bg {
-  background:
-    radial-gradient(ellipse 80% 50% at 10% 0%,  hsl(var(--primary) / 0.18), transparent 60%),
-    radial-gradient(ellipse 60% 50% at 90% 10%, hsl(var(--secondary) / 0.18), transparent 60%),
-    radial-gradient(ellipse 70% 60% at 50% 100%, hsl(var(--accent) / 0.10), transparent 60%),
-    hsl(var(--background));
+  background: transparent !important;
 }
 
-.glass {
-  @apply backdrop-blur-xl border;
-  background: hsl(var(--card) / 0.7);
-  border-color: hsl(var(--border) / 0.6);
+/* iOS 26 / Luxury Liquid Glass System — Unified Login Aesthetic Across All Pages */
+.liquid-glass,
+.glass,
+.bg-card {
+  backdrop-filter: blur(18px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(190%) !important;
+  transform: translateZ(0);
+  background: linear-gradient(
+    135deg,
+    rgba(28, 18, 34, 0.34) 0%,
+    rgba(18, 11, 23, 0.22) 55%,
+    rgba(44, 24, 50, 0.28) 100%
+  ) !important;
+  border: 1px solid rgba(255, 255, 255, 0.26) !important;
+  box-shadow:
+    0 20px 48px -10px rgba(0, 0, 0, 0.55),
+    0 0 28px -8px rgba(244, 143, 177, 0.22),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 1px 0 rgba(244, 143, 177, 0.14) !important;
 }
-.dark .glass {
-  background: hsl(var(--card) / 0.6);
-  border-color: hsl(var(--border) / 0.5);
+
+.dark .liquid-glass,
+.dark .glass,
+.dark .bg-card {
+  backdrop-filter: blur(18px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(190%) !important;
+  transform: translateZ(0);
+  background: linear-gradient(
+    135deg,
+    rgba(28, 18, 34, 0.34) 0%,
+    rgba(18, 11, 23, 0.22) 55%,
+    rgba(44, 24, 50, 0.28) 100%
+  ) !important;
+  border: 1px solid rgba(255, 255, 255, 0.26) !important;
+  box-shadow:
+    0 20px 48px -10px rgba(0, 0, 0, 0.55),
+    0 0 28px -8px rgba(244, 143, 177, 0.22),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 1px 0 rgba(244, 143, 177, 0.14) !important;
+}
+
+.liquid-glass-interactive {
+  transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.24s ease,
+              box-shadow 0.24s ease;
+}
+.liquid-glass-interactive:hover {
+  transform: translate3d(0, -3px, 0);
+  border-color: rgba(244, 143, 177, 0.5) !important;
+  box-shadow:
+    0 24px 54px -10px rgba(0, 0, 0, 0.65),
+    0 0 34px -6px rgba(244, 143, 177, 0.34),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.55) !important;
+}
+
+.liquid-input {
+  background: rgba(0, 0, 0, 0.42) !important;
+  border: 1px solid rgba(255, 255, 255, 0.32) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.dark .liquid-input {
+  background: rgba(0, 0, 0, 0.42) !important;
+  border: 1px solid rgba(255, 255, 255, 0.32) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.liquid-input::placeholder {
+  color: rgba(255, 255, 255, 0.68) !important;
+}
+.liquid-input option,
+.dark .liquid-input option {
+  background-color: #1f1724;
+  color: #ffffff;
 }
 
 .heading-serif { font-family: 'Cormorant Garamond', Georgia, serif; }

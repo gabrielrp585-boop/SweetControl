@@ -48,7 +48,7 @@ export function MikaaPanel() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 30, scale: 0.95 }}
           transition={{ type: "spring", stiffness: 320, damping: 28 }}
-          className="fixed bottom-5 right-5 z-50 w-[92vw] sm:w-[420px] h-[640px] max-h-[85vh] flex flex-col bg-card border border-border rounded-3xl shadow-2xl shadow-primary/20 overflow-hidden"
+          className="fixed bottom-3 right-3 sm:bottom-5 sm:right-5 z-50 w-[calc(100vw-1.5rem)] sm:w-[420px] h-[580px] max-h-[82dvh] flex flex-col liquid-glass rounded-3xl shadow-2xl overflow-hidden"
           data-testid="mikaa-panel"
         >
           <ChatHeader inDialog onClose={() => setOpen(false)} />

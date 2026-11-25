@@ -136,6 +136,9 @@ def calculate_recipe_cost_and_usage(
             yield_servings = 1
 
         scale = float(servings or 1) / yield_servings
+        for cost_item in recipe.get("cost_items", []) or []:
+            total_cost += float(cost_item.get("amount", 0) or 0) * scale
+
         for item in recipe.get("ingredients", []) or []:
             qty = float(item.get("qty", 0) or 0) * scale
             if qty <= 0:

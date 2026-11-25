@@ -82,8 +82,9 @@ async def build_context(db) -> str:
 
         month = datetime.now(timezone.utc).strftime("%Y-%m")
         total_month = sum(s.get("total", 0) for s in sales if s.get("sale_date", "").startswith(month))
-        profit_month = sum(s.get("profit", 0) for s in sales if s.get("sale_date", "").startswith(month))
+        gross_profit_month = sum(s.get("profit", 0) for s in sales if s.get("sale_date", "").startswith(month))
         expenses_month = sum(e.get("amount", 0) for e in expenses if e.get("expense_date", "").startswith(month))
+        net_profit_month = round(gross_profit_month - expenses_month, 2)
 
         low_stock = [i for i in ingredients
                      if float(i.get("stock_qty", 0)) <= float(i.get("min_stock", 0)) and float(i.get("min_stock", 0)) > 0]
@@ -96,9 +97,10 @@ async def build_context(db) -> str:
 
 📊 RESUMO FINANCEIRO DO MÊS ({month}):
 - Vendas: R$ {total_month:.2f}
-- Lucro: R$ {profit_month:.2f}
-- Gastos: R$ {expenses_month:.2f}
-- Margem real: {(profit_month / total_month * 100) if total_month else 0:.1f}%
+- Lucro Bruto de Vendas: R$ {gross_profit_month:.2f}
+- Gastos Operacionais: R$ {expenses_month:.2f}
+- Lucro Real Líquido: R$ {net_profit_month:.2f}
+- Margem líquida real: {(net_profit_month / total_month * 100) if total_month else 0:.1f}%
 - Margem padrão configurada: {settings.get('default_margin', 100)}%
 
 🧂 INGREDIENTES ({len(ingredients)} cadastrados):

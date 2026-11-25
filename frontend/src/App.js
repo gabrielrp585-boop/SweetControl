@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { Toaster } from "sonner";
 import "@/App.css";
 
@@ -9,6 +9,7 @@ import { MikaaProvider } from "@/context/MikaaContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import DashboardLayout from "@/layouts/DashboardLayout";
 import { MikaaFab, MikaaPanel } from "@/components/Mikaa";
+import { SeamlessVideoBackground } from "@/components/SeamlessVideoBackground";
 
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
@@ -23,10 +24,12 @@ import Settings from "@/pages/Settings";
 import Support from "@/pages/Support";
 import MikaaPage from "@/pages/Mikaa";
 
-const Protected = ({ children }) => (
+const ProtectedShell = () => (
   <ProtectedRoute>
     <MikaaProvider>
-      <DashboardLayout>{children}</DashboardLayout>
+      <DashboardLayout>
+        <Outlet />
+      </DashboardLayout>
       <MikaaFab />
       <MikaaPanel />
     </MikaaProvider>
@@ -38,19 +41,22 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <BrowserRouter>
+          <SeamlessVideoBackground src="/modelo.mp4" />
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<Protected><Dashboard /></Protected>} />
-            <Route path="/encomendas" element={<Protected><Orders /></Protected>} />
-            <Route path="/vendas" element={<Protected><Sales /></Protected>} />
-            <Route path="/massas" element={<Protected><Doughs /></Protected>} />
-            <Route path="/precos" element={<Protected><Prices /></Protected>} />
-            <Route path="/estoque" element={<Protected><Inventory /></Protected>} />
-            <Route path="/clientes" element={<Protected><Customers /></Protected>} />
-            <Route path="/relatorios" element={<Protected><Reports /></Protected>} />
-            <Route path="/mikaa" element={<Protected><MikaaPage /></Protected>} />
-            <Route path="/suporte" element={<Protected><Support /></Protected>} />
-            <Route path="/configuracoes" element={<Protected><Settings /></Protected>} />
+            <Route element={<ProtectedShell />}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/encomendas" element={<Orders />} />
+              <Route path="/vendas" element={<Sales />} />
+              <Route path="/massas" element={<Doughs />} />
+              <Route path="/precos" element={<Prices />} />
+              <Route path="/estoque" element={<Inventory />} />
+              <Route path="/clientes" element={<Customers />} />
+              <Route path="/relatorios" element={<Reports />} />
+              <Route path="/mikaa" element={<MikaaPage />} />
+              <Route path="/suporte" element={<Support />} />
+              <Route path="/configuracoes" element={<Settings />} />
+            </Route>
           </Routes>
           <Toaster
             position="top-right"

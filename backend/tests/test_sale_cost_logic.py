@@ -152,3 +152,24 @@ def test_recipe_usage_is_still_calculated_when_cost_is_manual():
     ])
 
     assert stock_usage == [{"ingredient_id": "egg", "ingredient_name": "Ovos", "qty": 40.0}]
+
+
+def test_calculate_recipe_cost_includes_scaled_cost_items():
+    ingredients = [{"id": "ing-1", "name": "Farinha", "unit_price": 0.01}]
+    recipes = [
+        {
+            "name": "Massa com Gás",
+            "yield_servings": 4,
+            "ingredients": [
+                {"ingredient_id": "ing-1", "ingredient_name": "Farinha", "qty": 200},
+            ],
+            "cost_items": [
+                {"description": "Gás", "amount": 2.0},
+            ],
+        }
+    ]
+
+    # 2 servings out of 4 (scale = 0.5): ingredients = 200 * 0.5 * 0.01 = 1.0; cost_items = 2.0 * 0.5 = 1.0 -> total = 2.0
+    cost, usage = calculate_recipe_cost_and_usage(recipes, ingredients, servings=2)
+    assert cost == 2.0
+    assert usage == [{"ingredient_id": "ing-1", "ingredient_name": "Farinha", "qty": 100.0}]

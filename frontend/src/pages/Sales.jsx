@@ -31,8 +31,9 @@ export default function Sales() {
   useEffect(() => { load(); }, []);
 
   const totalSales = sales.reduce((a, s) => a + s.total, 0);
-  const totalProfit = sales.reduce((a, s) => a + s.profit, 0);
+  const totalGrossProfit = sales.reduce((a, s) => a + s.profit, 0);
   const totalExpenses = expenses.reduce((a, e) => a + e.amount, 0);
+  const totalNetProfit = totalGrossProfit - totalExpenses;
 
   const saveSale = async (e) => {
     e.preventDefault();
@@ -91,11 +92,11 @@ export default function Sales() {
         title="Vendas & Gastos"
         subtitle="Registre vendas e despesas para acompanhar seu lucro em tempo real."
         action={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setOpenExp(true)} data-testid="new-expense-btn">
+          <div className="flex flex-wrap sm:flex-nowrap gap-2 w-full sm:w-auto">
+            <Button variant="outline" className="flex-1 sm:flex-initial" onClick={() => setOpenExp(true)} data-testid="new-expense-btn">
               <Receipt className="h-4 w-4" /> Novo gasto
             </Button>
-            <Button onClick={() => setOpen(true)} data-testid="new-sale-btn">
+            <Button className="flex-1 sm:flex-initial" onClick={() => setOpen(true)} data-testid="new-sale-btn">
               <Plus className="h-4 w-4" /> Nova venda
             </Button>
           </div>
@@ -115,10 +116,12 @@ export default function Sales() {
         <Card className="p-5">
           <div className="flex items-center justify-between">
             <TrendingUp className="h-5 w-5 text-gold" />
-            <Badge variant="accent">Lucro</Badge>
+            <Badge variant="accent">Lucro Líquido</Badge>
           </div>
-          <p className="heading-serif text-3xl mt-3">{brl(totalProfit)}</p>
-          <p className="text-xs text-muted-foreground mt-1">Receita - custos</p>
+          <p className="heading-serif text-3xl mt-3">{brl(totalNetProfit)}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Bruto vendas: {brl(totalGrossProfit)} − Gastos
+          </p>
         </Card>
         <Card className="p-5">
           <div className="flex items-center justify-between">

@@ -333,7 +333,7 @@ function RecipesView({ doughs, ingredients, reload }) {
               {form.ingredients.map((row, idx) => (
                 <div key={idx} className="grid grid-cols-12 gap-2 items-center">
                   <Select
-                    className="col-span-6"
+                    className="col-span-12 sm:col-span-6"
                     value={row.ingredient_id}
                     onChange={(e) => updateRow(idx, "ingredient_id", e.target.value)}
                     required
@@ -346,7 +346,7 @@ function RecipesView({ doughs, ingredients, reload }) {
                     ))}
                   </Select>
                   <Input
-                    className="col-span-3"
+                    className="col-span-7 sm:col-span-3"
                     type="number"
                     step="0.01"
                     value={row.qty}
@@ -354,11 +354,11 @@ function RecipesView({ doughs, ingredients, reload }) {
                     placeholder="Qtd"
                     required
                   />
-                  <div className="col-span-2 text-sm text-muted-foreground">{row.unit}</div>
+                  <div className="col-span-3 sm:col-span-2 text-sm text-muted-foreground truncate">{row.unit}</div>
                   <button
                     type="button"
                     onClick={() => removeRow(idx)}
-                    className="col-span-1 p-2 rounded-xl hover:bg-destructive/10 hover:text-destructive"
+                    className="col-span-2 sm:col-span-1 p-2 rounded-xl hover:bg-destructive/10 hover:text-destructive flex justify-center"
                   >
                     <X className="h-4 w-4" />
                   </button>

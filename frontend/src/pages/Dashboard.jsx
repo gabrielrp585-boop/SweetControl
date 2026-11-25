@@ -30,13 +30,14 @@ function KpiCard({ icon: Icon, label, value, sub, tint, testId }) {
   return (
     <motion.div
       {...fadeUp}
-      whileHover={{ y: -3 }}
-      className="relative overflow-hidden bg-card border border-border/70 rounded-2xl p-5 shadow-[0_8px_28px_rgb(0,0,0,0.03)]"
+      whileHover={{ y: -4, scale: 1.01 }}
+      className="relative overflow-hidden liquid-glass liquid-glass-interactive rounded-3xl p-5"
       data-testid={testId}
     >
-      <div className={`absolute -top-10 -right-10 h-32 w-32 rounded-full blur-2xl opacity-50 ${tint}`} />
+      <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent" />
+      <div className={`absolute -top-10 -right-10 h-32 w-32 rounded-full blur-2xl opacity-55 ${tint}`} />
       <div className="relative flex items-start justify-between">
-        <div className={`h-11 w-11 rounded-2xl flex items-center justify-center ${tint}`}>
+        <div className={`h-11 w-11 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/20 ${tint}`}>
           <Icon className="h-5 w-5 text-primary-foreground dark:text-foreground" strokeWidth={1.8} />
         </div>
         <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
@@ -88,15 +89,19 @@ export default function Dashboard() {
           label="Vendido no mês"
           value={brl(data.total_month)}
           sub={`Hoje: ${brl(data.total_day)}`}
-          tint="bg-primary/30"
+          tint="bg-rose-500/30"
           testId="kpi-month"
         />
         <KpiCard
           icon={Package}
           label="Custo de Produção"
-          value={brl(data.cogs_month || 0)}
-          sub="Vendas realizadas e encomendas abertas"
-          tint="bg-rose-200/40"
+          value={brl(data.sales_cogs_month ?? data.cogs_month ?? 0)}
+          sub={
+            data.open_order_costs > 0
+              ? `Vendas · Encomendas abertas: ${brl(data.open_order_costs)}`
+              : "Custo das vendas realizadas"
+          }
+          tint="bg-purple-500/30"
           testId="kpi-cogs"
         />
         <KpiCard
@@ -104,22 +109,22 @@ export default function Dashboard() {
           label="Despesas no mês"
           value={brl(data.expenses_month || 0)}
           sub="Gastos operacionais"
-          tint="bg-secondary/40"
+          tint="bg-amber-500/30"
           testId="kpi-expenses"
         />
         <KpiCard
           icon={DollarSign}
           label="Lucro Real Líquido"
           value={brl(data.profit_month)}
-          sub="Receita - (Custos + Despesas)"
-          tint="bg-emerald-200/40"
+          sub={`Bruto vendas: ${brl(data.gross_profit_month ?? ((data.profit_month || 0) + (data.expenses_month || 0)))}`}
+          tint="bg-emerald-500/30"
           testId="kpi-profit"
         />
       </div>
 
       <motion.div
         {...fadeUp}
-        className="border border-border/70 bg-card/80 rounded-2xl px-4 py-3 text-xs text-muted-foreground"
+        className="liquid-glass rounded-2xl px-4 py-3 text-xs font-medium text-white/90"
       >
         Cálculo consolidado: ingredientes repetidos no mesmo pedido são somados uma única vez para manter custo, lucro e estoque reais.
       </motion.div>

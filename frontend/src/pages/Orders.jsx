@@ -394,7 +394,10 @@ export default function Orders() {
                 setForm((current) => ({
                   ...current,
                   cake_id: event.target.value,
-                  dough: cake ? cake.name : "",
+                  dough: cake ? (cake.dough_name || cake.name) : current.dough,
+                  fillings: cake && cake.filling_names?.length
+                    ? cake.filling_names.join(", ")
+                    : current.fillings,
                   ring_size: cake ? cake.ring_size : current.ring_size,
                   total: cake ? cake.final_price : current.total,
                 }));

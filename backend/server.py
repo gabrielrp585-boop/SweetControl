@@ -471,6 +471,7 @@ async def update_ingredient(iid: str, payload: IngredientIn, user=Depends(get_cu
     item = await db.ingredients.find_one({"id": iid}, {"_id": 0})
     if not item:
         raise HTTPException(status_code=404, detail="Ingrediente não encontrado")
+    await _recalculate_doughs_and_cakes_for_ingredient(iid)
     return item
 
 
@@ -518,6 +519,29 @@ async def compute_dough_cost(ingredients: List[dict], cost_items: List[dict] = N
     return round(total, 2)
 
 
+async def _recalculate_cakes_for_dough(did: str):
+    affected_cakes = await db.cakes.find(
+        {"$or": [{"dough_id": did}, {"filling_ids": did}, {"coating_id": did}]},
+        {"_id": 0},
+    ).to_list(500)
+    for cake in affected_cakes:
+        computed = await _compute_cake(CakeIn(**cake))
+        await db.cakes.update_one({"id": cake["id"]}, {"$set": computed})
+
+
+async def _recalculate_doughs_and_cakes_for_ingredient(iid: str):
+    affected_doughs = await db.doughs.find(
+        {"ingredients.ingredient_id": iid}, {"_id": 0}
+    ).to_list(2000)
+    for dough in affected_doughs:
+        new_cost = await compute_dough_cost(
+            dough.get("ingredients", []) or [],
+            dough.get("cost_items", []) or [],
+        )
+        await db.doughs.update_one({"id": dough["id"]}, {"$set": {"total_cost": new_cost}})
+        await _recalculate_cakes_for_dough(dough["id"])
+
+
 @api.get("/doughs", response_model=List[Dough])
 async def list_doughs(user=Depends(get_current_user)):
     return await db.doughs.find({}, {"_id": 0}).sort("name", 1).to_list(2000)
@@ -541,6 +565,7 @@ async def update_dough(did: str, payload: DoughIn, user=Depends(get_current_user
     doc = await db.doughs.find_one({"id": did}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Massa não encontrada")
+    await _recalculate_cakes_for_dough(did)
     return doc
 
 
@@ -967,6 +992,7 @@ async def update_order(oid: str, payload: OrderIn, user=Depends(get_current_user
 @api.delete("/orders/{oid}")
 async def delete_order(oid: str, user=Depends(get_current_user)):
     await db.orders.delete_one({"id": oid})
+    await db.sales.delete_many({"order_id": oid})
     return {"ok": True}
 
 
@@ -1126,8 +1152,9 @@ async def dashboard(user=Depends(get_current_user)):
                 order["cost_total"] = order_cost
         open_order_costs += order_cost
 
-    # Production costs include sales and open orders created this month.
-    cogs_month = sum(float(s.get("cost", 0) or 0) * int(s.get("qty", 1) or 1) for s in sales if s.get("sale_date", "").startswith(month_prefix)) + open_order_costs
+    # Production costs of completed sales this month (plus separate open orders estimate).
+    sales_cogs_month = sum(float(s.get("cost", 0) or 0) * int(s.get("qty", 1) or 1) for s in sales if s.get("sale_date", "").startswith(month_prefix))
+    cogs_month = sales_cogs_month + open_order_costs
     sales_gross_profit = sum(float(s.get("profit", 0) or 0) for s in sales if s.get("sale_date", "").startswith(month_prefix))
     expenses_month = sum(float(e.get("amount", 0) or 0) for e in expenses if e.get("expense_date", "").startswith(month_prefix))
     
@@ -1172,6 +1199,9 @@ async def dashboard(user=Depends(get_current_user)):
         "total_day": round(total_day, 2),
         "total_month": round(total_month, 2),
         "cogs_month": round(cogs_month, 2),
+        "sales_cogs_month": round(sales_cogs_month, 2),
+        "open_order_costs": round(open_order_costs, 2),
+        "gross_profit_month": round(sales_gross_profit, 2),
         "expenses_month": round(expenses_month, 2),
         "profit_month": profit_month, # Lucro Real Líquido
         "pending_orders": pending_orders,
@@ -1405,10 +1435,12 @@ def _build_xlsx(title: str, headers: List[str], rows: List[List]) -> bytes:
         cell.alignment = Alignment(horizontal="center")
     for r, row in enumerate(rows, 2):
         for c, val in enumerate(row, 1):
-            ws.cell(row=r, column=c, value=val)
+            cell = ws.cell(row=r, column=c, value=val)
+            if isinstance(val, float):
+                cell.number_format = 'R$ #,##0.00'
     for col in ws.columns:
         max_len = max((len(str(cell.value or "")) for cell in col), default=10)
-        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 6, 40)
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -1450,15 +1482,35 @@ async def report_months(user=Depends(get_current_user)):
 async def report_sales(fmt: str, month: Optional[str] = Query(default=None, regex=r"^\d{4}-(0[1-9]|1[0-2])$"), user=Depends(get_current_user)):
     query = {"sale_date": {"$regex": f"^{month}"}} if month else {}
     sales = await db.sales.find(query, {"_id": 0}).sort("sale_date", -1).to_list(5000)
-    headers = ["Data", "Descrição", "Aro", "Qtd", "Preço Un.", "Custo", "Total", "Lucro"]
-    rows = [[s.get("sale_date", ""), s.get("description", ""), s.get("ring_size") or "-",
-             s.get("qty", 0), f"R$ {s.get('unit_price', 0):.2f}", f"R$ {s.get('cost', 0):.2f}",
-             f"R$ {s.get('total', 0):.2f}", f"R$ {s.get('profit', 0):.2f}"] for s in sales]
+    order_ids = [s.get("order_id") for s in sales if s.get("order_id")]
+    if order_ids:
+        orders = await db.orders.find({"id": {"$in": order_ids}}, {"_id": 0}).to_list(5000)
+        await _refresh_zero_cost_order_sales(sales, orders)
+
+    headers = ["Data", "Descrição", "Aro", "Qtd", "Preço Un.", "Custo Total", "Total", "Lucro"]
     if fmt == "pdf":
+        rows = []
+        for s in sales:
+            qty = int(s.get("qty", 1) or 1)
+            total_cost = round(float(s.get("cost", 0) or 0) * qty, 2)
+            rows.append([
+                s.get("sale_date", ""), s.get("description", ""), s.get("ring_size") or "-",
+                qty, f"R$ {float(s.get('unit_price', 0) or 0):.2f}", f"R$ {total_cost:.2f}",
+                f"R$ {float(s.get('total', 0) or 0):.2f}", f"R$ {float(s.get('profit', 0) or 0):.2f}",
+            ])
         data = _build_pdf("Relatório de Vendas", headers, rows)
         return StreamingResponse(io.BytesIO(data), media_type="application/pdf",
                                  headers={"Content-Disposition": "attachment; filename=vendas.pdf"})
     elif fmt == "xlsx":
+        rows = []
+        for s in sales:
+            qty = int(s.get("qty", 1) or 1)
+            total_cost = round(float(s.get("cost", 0) or 0) * qty, 2)
+            rows.append([
+                s.get("sale_date", ""), s.get("description", ""), s.get("ring_size") or "-",
+                qty, round(float(s.get("unit_price", 0) or 0), 2), total_cost,
+                round(float(s.get("total", 0) or 0), 2), round(float(s.get("profit", 0) or 0), 2),
+            ])
         data = _build_xlsx("Vendas", headers, rows)
         return StreamingResponse(io.BytesIO(data),
                                  media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1471,13 +1523,15 @@ async def report_expenses(fmt: str, month: Optional[str] = Query(default=None, r
     query = {"expense_date": {"$regex": f"^{month}"}} if month else {}
     items = await db.expenses.find(query, {"_id": 0}).sort("expense_date", -1).to_list(5000)
     headers = ["Data", "Descrição", "Categoria", "Valor"]
-    rows = [[i.get("expense_date", ""), i.get("description", ""), i.get("category", ""),
-             f"R$ {i.get('amount', 0):.2f}"] for i in items]
     if fmt == "pdf":
+        rows = [[i.get("expense_date", ""), i.get("description", ""), i.get("category", ""),
+                 f"R$ {float(i.get('amount', 0) or 0):.2f}"] for i in items]
         data = _build_pdf("Relatório de Gastos", headers, rows)
         return StreamingResponse(io.BytesIO(data), media_type="application/pdf",
                                  headers={"Content-Disposition": "attachment; filename=gastos.pdf"})
     elif fmt == "xlsx":
+        rows = [[i.get("expense_date", ""), i.get("description", ""), i.get("category", ""),
+                 round(float(i.get("amount", 0) or 0), 2)] for i in items]
         data = _build_xlsx("Gastos", headers, rows)
         return StreamingResponse(io.BytesIO(data),
                                  media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1491,27 +1545,37 @@ async def report_financial(fmt: str, month: Optional[str] = Query(default=None, 
     expenses_query = {"expense_date": {"$regex": f"^{month}"}} if month else {}
     sales = await db.sales.find(sales_query, {"_id": 0}).to_list(10000)
     expenses = await db.expenses.find(expenses_query, {"_id": 0}).to_list(10000)
+    order_ids = [s.get("order_id") for s in sales if s.get("order_id")]
+    if order_ids:
+        orders = await db.orders.find({"id": {"$in": order_ids}}, {"_id": 0}).to_list(5000)
+        await _refresh_zero_cost_order_sales(sales, orders)
 
-    total_sales = sum(float(s.get("total", 0) or 0) for s in sales)
-    total_cogs = sum(float(s.get("cost", 0) or 0) * int(s.get("qty", 1) or 1) for s in sales)
-    gross_profit = sum(float(s.get("profit", 0) or 0) for s in sales)
-    total_expenses = sum(float(e.get("amount", 0) or 0) for e in expenses)
+    total_sales = round(sum(float(s.get("total", 0) or 0) for s in sales), 2)
+    total_cogs = round(sum(float(s.get("cost", 0) or 0) * int(s.get("qty", 1) or 1) for s in sales), 2)
+    gross_profit = round(sum(float(s.get("profit", 0) or 0) for s in sales), 2)
+    total_expenses = round(sum(float(e.get("amount", 0) or 0) for e in expenses), 2)
     net_profit = round(gross_profit - total_expenses, 2)
 
     headers = ["Indicador Financeiro", "Valor (R$)"]
-    rows = [
-        ["1. Receita Bruta Total (Vendas)", f"R$ {total_sales:.2f}"],
-        ["2. Custo dos Produtos Vendidos (Ingredientes)", f"R$ {total_cogs:.2f}"],
-        ["3. Lucro Bruto de Vendas", f"R$ {gross_profit:.2f}"],
-        ["4. Despesas Operacionais Totais", f"R$ {total_expenses:.2f}"],
-        ["5. LUCRO REAL LÍQUIDO FINAL", f"R$ {net_profit:.2f}"],
-    ]
-
     if fmt == "pdf":
+        rows = [
+            ["1. Receita Bruta Total (Vendas)", f"R$ {total_sales:.2f}"],
+            ["2. Custo dos Produtos Vendidos (Ingredientes)", f"R$ {total_cogs:.2f}"],
+            ["3. Lucro Bruto de Vendas", f"R$ {gross_profit:.2f}"],
+            ["4. Despesas Operacionais Totais", f"R$ {total_expenses:.2f}"],
+            ["5. LUCRO REAL LÍQUIDO FINAL", f"R$ {net_profit:.2f}"],
+        ]
         data = _build_pdf("Demonstrativo Financeiro - Lucro Real", headers, rows)
         return StreamingResponse(io.BytesIO(data), media_type="application/pdf",
                                  headers={"Content-Disposition": "attachment; filename=lucro_real_dre.pdf"})
     elif fmt == "xlsx":
+        rows = [
+            ["1. Receita Bruta Total (Vendas)", total_sales],
+            ["2. Custo dos Produtos Vendidos (Ingredientes)", total_cogs],
+            ["3. Lucro Bruto de Vendas", gross_profit],
+            ["4. Despesas Operacionais Totais", total_expenses],
+            ["5. LUCRO REAL LÍQUIDO FINAL", net_profit],
+        ]
         data = _build_xlsx("Lucro Real", headers, rows)
         return StreamingResponse(io.BytesIO(data),
                                  media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1522,15 +1586,40 @@ async def report_financial(fmt: str, month: Optional[str] = Query(default=None, 
 async def report_orders(fmt: str, month: Optional[str] = Query(default=None, regex=r"^\d{4}-(0[1-9]|1[0-2])$"), user=Depends(get_current_user)):
     query = {"delivery_date": {"$regex": f"^{month}"}} if month else {}
     items = await db.orders.find(query, {"_id": 0}).sort("delivery_date", -1).to_list(5000)
-    headers = ["Entrega", "Cliente", "Telefone", "Aro", "Massa", "Status", "Total"]
-    rows = [[o.get("delivery_date", ""), o.get("customer_name", ""), o.get("phone", ""),
-             o.get("ring_size", ""), o.get("dough", ""), o.get("status", ""),
-             f"R$ {o.get('total', 0):.2f}"] for o in items]
+    for o in items:
+        if not float(o.get("cost_total", 0) or 0) and (
+            o.get("cake_id") or o.get("cost_items") or o.get("dough") or o.get("fillings")
+        ):
+            o["cost_total"], _ = await compute_order_cost_and_deduct_stock(o, deduct_stock=False)
+            if o["cost_total"] > 0:
+                await db.orders.update_one({"id": o["id"]}, {"$set": {"cost_total": o["cost_total"]}})
+
+    headers = ["Entrega", "Cliente", "Telefone", "Aro", "Massa", "Status", "Custo", "Total", "Lucro"]
     if fmt == "pdf":
+        rows = []
+        for o in items:
+            total = round(float(o.get("total", 0) or 0), 2)
+            cost = round(float(o.get("cost_total", 0) or 0), 2)
+            profit = round(total - cost, 2)
+            rows.append([
+                o.get("delivery_date", ""), o.get("customer_name", ""), o.get("phone", ""),
+                o.get("ring_size", ""), o.get("dough", ""), o.get("status", ""),
+                f"R$ {cost:.2f}", f"R$ {total:.2f}", f"R$ {profit:.2f}",
+            ])
         data = _build_pdf("Relatório de Encomendas", headers, rows)
         return StreamingResponse(io.BytesIO(data), media_type="application/pdf",
                                  headers={"Content-Disposition": "attachment; filename=encomendas.pdf"})
     if fmt == "xlsx":
+        rows = []
+        for o in items:
+            total = round(float(o.get("total", 0) or 0), 2)
+            cost = round(float(o.get("cost_total", 0) or 0), 2)
+            profit = round(total - cost, 2)
+            rows.append([
+                o.get("delivery_date", ""), o.get("customer_name", ""), o.get("phone", ""),
+                o.get("ring_size", ""), o.get("dough", ""), o.get("status", ""),
+                cost, total, profit,
+            ])
         data = _build_xlsx("Encomendas", headers, rows)
         return StreamingResponse(io.BytesIO(data),
                                  media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
